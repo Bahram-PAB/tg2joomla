@@ -61,9 +61,14 @@ async function joomla(method, url, body) {
 }
 
 const createArticle = a => joomla('POST', `${JC}/content/articles`, { ...a, state: 1, language: LANGUAGE });
-// com_media: پوشه مقصد در query با پیشوند آداپتر (images:/images/tg) و نام فایل در فیلد name
-const uploadMedia = (dir, name, buf) =>
-  joomla('POST', `${JC}/media/files?path=${encodeURIComponent(`images:/${dir}`)}`, { name, content: buf.toString('base64') });
+// com_media: آداپتر local-images (نام پوشه ریشه با پیشوند local-)، path در بدنه، نام فایل در name
+const ensureDir = dir =>
+  joomla('POST', `${JC}/media/files`, { name: dir.split('/').pop(), path: `local-images:/${dir.split('/').slice(0, -1).join('/')}` })
+    .catch(e => { if (e.status !== 400) throw e; }); // 400 = پوشه از قبل هست
+const uploadMedia = async (dir, name, buf) => {
+  await ensureDir(dir);
+  return joomla('POST', `${JC}/media/files`, { name, content: buf.toString('base64'), path: `local-images:/${dir}` });
+};
 
 async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
@@ -214,9 +219,7 @@ async function diag() {
   const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
   const dfn = `diag-test-${Date.now()}.jpg`;
   for (const [label, url, body] of [
-    ['query adapter path', `${JC}/media/files?path=${encodeURIComponent('images:/images/tg')}`, { name: dfn, content: px.toString('base64') }],
-    ['path in body', `${JC}/media/files`, { name: dfn, content: px.toString('base64'), path: 'images:/images/tg' }],
-    ['root + slashname', `${JC}/media/files?path=${encodeURIComponent('images:/')}`, { name: `tg/${dfn}`, content: px.toString('base64') }],
+    ['body adapter path', `${JC}/media/files`, { name: dfn, content: px.toString('base64'), path: 'local-images:/images/tg' }],
   ]) {
     try {
       await joomla('POST', url, body);
