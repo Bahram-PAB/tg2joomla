@@ -171,8 +171,8 @@ async function main() {
         } else {
           const { c, art } = r;
           let target = state.ids[key];
-          if (edited && known && !target) {
-            // مطلبِ اصلِ این پیام قبل از ثبت ids ساخته شده — با عنوان پیدا می‌شود
+          if (edited && !target) {
+            // مطلبِ اصلِ این پیام ممکن است قبل از ثبت ids ساخته شده باشد — با عنوان پیدا می‌شود
             const found = await joomla('GET', `${JC}/content/articles?page[limit]=10&search=${encodeURIComponent(c.title)}`);
             const hit = (found.data || []).find(a => a.attributes.title === c.title);
             if (hit) { target = hit.attributes.id; state.ids[key] = target; }
