@@ -98,7 +98,7 @@ function buildContent(post) {
     if (!post.caption) return { kind: 'photo-no-caption-skipped' };
     const p = parseStructured(post.caption);
     if (!p) return { kind: 'structure-skipped' };
-    return { kind: 'photo', photo: post.photo[post.photo.length - 1], title: p.title, html: toHtml(p.body), alt: esc(p.title), catid: CAT_TEXT };
+    return { kind: 'photo', photos: post.photo, title: p.title, html: toHtml(p.body), alt: esc(p.title), catid: CAT_TEXT };
   }
   if (post.text) {
     const p = parseStructured(post.text);
@@ -111,11 +111,20 @@ function buildContent(post) {
 // دانلود و آپلود رسانه (در صورت تغییر file_id؛ در غیر این صورت از آپلود قبلی استفاده می‌شود)
 async function mediaFor(post, c, key, state) {
   const dir = c.kind === 'photo' ? MEDIA_DIR : AUDIO_DIR;
-  const fid = c.kind === 'photo' ? c.photo.file_id : c.audio.file_id;
   const mime = c.kind === 'photo' ? 'image/jpeg' : c.audio.mime_type;
+  const fid = c.kind === 'photo' ? c.photos[c.photos.length - 1].file_id : c.audio.file_id;
   if (state.files[key] === fid && state.fnames[key]) return state.fnames[key];
   const n = (state.fcount[key] || 0) + 1;
-  const { buf, name } = await downloadFile(fid);
+  let buf, name;
+  if (c.kind === 'photo') {
+    // از بزرگ‌ترین سایز شروع کن؛ اگر 404 داد، سایز کوچک‌تر را امتحان کن
+    for (let i = c.photos.length - 1; i >= 0; i--) {
+      try { ({ buf, name } = await downloadFile(c.photos[i].file_id)); break; }
+      catch (e) { if (i === 0 || !/TG download 404/.test(e.message)) throw e; console.log(`  photo size ${i} failed, trying smaller…`); }
+    }
+  } else {
+    ({ buf, name } = await downloadFile(fid));
+  }
   const fname = `tg-${post.message_id}${n > 1 ? '-' + n : ''}.${extOf(name, mime)}`;
   await uploadMedia(dir, fname, buf);
   state.files[key] = fid; state.fnames[key] = fname; state.fcount[key] = n;
