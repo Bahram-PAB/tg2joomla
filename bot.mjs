@@ -61,13 +61,17 @@ async function joomla(method, url, body) {
 }
 
 const createArticle = a => joomla('POST', `${JC}/content/articles`, { ...a, state: 1, language: LANGUAGE });
-// com_media: آداپتر local-images (نام پوشه ریشه با پیشوند local-)، path در بدنه، نام فایل در name
-const ensureDir = dir =>
-  joomla('POST', `${JC}/media/files`, { name: dir.split('/').pop(), path: `local-images:/${dir.split('/').slice(0, -1).join('/')}` })
-    .catch(e => { if (e.status !== 400) throw e; }); // 400 = پوشه از قبل هست
+// API جوملا ۶: path در بدنه، با نام آداپتر local-images؛ نقطه در path = فایل، بدون نقطه = پوشه
+const ensureDir = async dir => {
+  const segs = dir.split('/');
+  for (let i = 1; i <= segs.length; i++) {
+    await joomla('POST', `${JC}/media/files`, { path: `local-images:/${segs.slice(0, i).join('/')}` })
+      .catch(e => { if (e.status !== 400 && e.status !== 409) throw e; }); // 400/409 = پوشه از قبل هست
+  }
+};
 const uploadMedia = async (dir, name, buf) => {
   await ensureDir(dir);
-  return joomla('POST', `${JC}/media/files`, { name, content: buf.toString('base64'), path: `local-images:/${dir}` });
+  return joomla('POST', `${JC}/media/files`, { path: `local-images:/${dir}/${name}`, content: buf.toString('base64') });
 };
 
 async function downloadFile(fileId) {
@@ -219,7 +223,7 @@ async function diag() {
   const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
   const dfn = `diag-test-${Date.now()}.jpg`;
   for (const [label, url, body] of [
-    ['body adapter path', `${JC}/media/files`, { name: dfn, content: px.toString('base64'), path: 'local-images:/images/tg' }],
+    ['file with full path', `${JC}/media/files`, { path: `local-images:/${MEDIA_DIR}/${dfn}`, content: px.toString('base64') }],
   ]) {
     try {
       await joomla('POST', url, body);
