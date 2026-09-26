@@ -167,7 +167,7 @@ async function diag() {
   }
   const arts = await joomla('GET', `${JC}/content/articles?page[limit]=5`);
   console.log('latest articles:');
-  for (const a of JSON.parse(arts).data || []) {
+  for (const a of arts.data || []) {
     const x = a.attributes;
     console.log(`  id=${x.id} state=${x.state} featured=${x.featured} ${String(x.title).slice(0, 60)}`);
   }
