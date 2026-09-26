@@ -171,6 +171,16 @@ async function diag() {
     const x = a.attributes;
     console.log(`  id=${x.id} state=${x.state} featured=${x.featured} ${String(x.title).slice(0, 60)}`);
   }
+  const media = await joomla('GET', `${JC}/media?path=images`);
+  console.log('media root:');
+  for (const f of (media.data || []).slice(0, 60)) console.log('  ', (f.attributes && (f.attributes.path || f.attributes.name)) || JSON.stringify(f).slice(0, 90));
+  const id = process.argv[3];
+  if (id) {
+    const one = await joomla('GET', `${JC}/content/articles/${id}`);
+    const x = one.data.attributes;
+    console.log(`article ${id}: created=${x.created} by=${x.created_by} cat=${x.catid} state=${x.state}`);
+    console.log('articletext[0:600]:', String(x.articletext).slice(0, 600));
+  }
 }
 
 if (process.argv[2] === 'diag') await diag();
