@@ -1,5 +1,6 @@
 // tg2joomla — پیام‌های کانال تلگرام → مطلب جوملا ۶ (انتشار مستقیم، بدون بازنویسی)
 // ساختار پیام: سطر اول = عنوان مطلب، سطرهای بعدی = متن مطلب
+// ویرایش پیام کانال → به‌روزرسانی همان مطلب در جوملا (بدون ساخت مطلب تکراری)
 import fs from 'node:fs';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -33,7 +34,7 @@ function parseStructured(text) {
 
 const extOf = (name, mime) => (
   (name.match(/\.([a-z0-9]+)$/i) || [])[1]
-  || { 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3' }[mime]
+  || { 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'image/jpeg': 'jpg' }[mime]
   || 'bin'
 ).toLowerCase();
 
@@ -70,38 +71,53 @@ async function downloadFile(fileId) {
   return { buf: Buffer.from(await res.arrayBuffer()), name: f.file_path.split('/').pop() };
 }
 
-async function handlePost(post) {
+// تعیین نوع پیام و تولید محتوای مطلب از روی آن
+function buildContent(post) {
   const audio = post.audio || (post.document && String(post.document.mime_type || '').startsWith('audio/') && post.document);
   if (audio) {
     const cap = (post.caption || '').trim();
     const p = cap ? parseStructured(cap) : null;
-    const title = p ? p.title : (audio.file_name || 'فایل صوتی').replace(/\.[a-z0-9]+$/i, '');
-    const { buf, name } = await downloadFile(audio.file_id);
-    const fname = `tg-${post.message_id}.${extOf(name, audio.mime_type)}`;
-    await uploadMedia(AUDIO_DIR, fname, buf);
-    const art = `<audio controls src="/${AUDIO_DIR}/${fname}"></audio>` + (p ? '\n' + toHtml(p.body) : '');
-    await createArticle({ title, articletext: art, catid: CAT_AUDIO });
-    return 'audio';
+    return { kind: 'audio', audio, title: p ? p.title : (audio.file_name || 'فایل صوتی').replace(/\.[a-z0-9]+$/i, ''), html: p ? toHtml(p.body) : '', catid: CAT_AUDIO };
   }
   if (post.photo) {
-    // ponytail: در آلبوم فقط عکسِ دارای کپشن منتشر می‌شود؛ پردازش کامل آلبوم را وقتی اضافه کن که لازم شد
-    if (!post.caption) return 'photo-no-caption-skipped';
+    if (!post.caption) return { kind: 'photo-no-caption-skipped' };
     const p = parseStructured(post.caption);
-    if (!p) return 'structure-skipped';
-    const { buf, name } = await downloadFile(post.photo[post.photo.length - 1].file_id);
-    const fname = `tg-${post.message_id}.${extOf(name, 'image/jpeg')}`;
-    await uploadMedia(MEDIA_DIR, fname, buf);
-    const art = `<figure><img src="/${MEDIA_DIR}/${fname}" alt="${esc(p.title)}"></figure>\n` + toHtml(p.body);
-    await createArticle({ title: p.title, articletext: art, catid: CAT_TEXT });
-    return 'photo';
+    if (!p) return { kind: 'structure-skipped' };
+    return { kind: 'photo', photo: post.photo[post.photo.length - 1], title: p.title, html: toHtml(p.body), alt: esc(p.title), catid: CAT_TEXT };
   }
   if (post.text) {
     const p = parseStructured(post.text);
-    if (!p) return 'structure-skipped';
-    await createArticle({ title: p.title, articletext: toHtml(p.body), catid: CAT_TEXT });
-    return 'text';
+    if (!p) return { kind: 'structure-skipped' };
+    return { kind: 'text', title: p.title, html: toHtml(p.body), catid: CAT_TEXT };
   }
-  return 'type-skipped';
+  return { kind: 'type-skipped' };
+}
+
+// دانلود و آپلود رسانه (در صورت تغییر file_id؛ در غیر این صورت از آپلود قبلی استفاده می‌شود)
+async function mediaFor(post, c, key, state) {
+  const dir = c.kind === 'photo' ? MEDIA_DIR : AUDIO_DIR;
+  const fid = c.kind === 'photo' ? c.photo.file_id : c.audio.file_id;
+  const mime = c.kind === 'photo' ? 'image/jpeg' : c.audio.mime_type;
+  if (state.files[key] === fid && state.fnames[key]) return state.fnames[key];
+  const n = (state.fcount[key] || 0) + 1;
+  const fname = `tg-${post.message_id}${n > 1 ? '-' + n : ''}.${extOf(c.audio && c.audio.file_name, mime)}`;
+  const { buf } = await downloadFile(fid);
+  await uploadMedia(dir, fname, buf);
+  state.files[key] = fid; state.fnames[key] = fname; state.fcount[key] = n;
+  return fname;
+}
+
+// خروجی: رشته = رد شده؛ شیء = محتوای آماده انتشار
+async function handlePost(post, key, state) {
+  const c = buildContent(post);
+  if (['photo-no-caption-skipped', 'structure-skipped', 'type-skipped'].includes(c.kind)) return c.kind;
+  const fname = await mediaFor(post, c, key, state);
+  const art = c.kind === 'photo'
+    ? `<figure><img src="/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
+    : c.kind === 'audio'
+      ? `<audio controls src="/${AUDIO_DIR}/${fname}"></audio>${c.html ? '\n' + c.html : ''}`
+      : c.html;
+  return { c, art };
 }
 
 const loadState = () => {
@@ -115,7 +131,8 @@ async function main() {
   if (missing.length) throw new Error('Missing secrets: ' + missing.join(', '));
 
   const state = loadState();
-  const updates = (await tg('getUpdates', { offset: state.lastUpdateId + 1, allowed_updates: ['channel_post'], timeout: 0 })) || [];
+  state.ids = state.ids || {}; state.files = state.files || {}; state.fnames = state.fnames || {}; state.fcount = state.fcount || {};
+  const updates = (await tg('getUpdates', { offset: state.lastUpdateId + 1, allowed_updates: ['channel_post', 'edited_channel_post'], timeout: 0 })) || [];
 
   // اجرای اول: تاریخچه انبوه (بیش از ۲ پیام معلق) منتشر نمی‌شود؛ پیام‌های تازه بلافاصله می‌روند
   if (state.lastUpdateId === 0 && updates.length > 2) {
@@ -127,13 +144,37 @@ async function main() {
 
   const errors = [];
   for (const u of updates) {
-    const post = u.channel_post;
+    const post = u.edited_channel_post || u.channel_post;
+    const edited = !!u.edited_channel_post;
     if (!post) { state.lastUpdateId = u.update_id; continue; }
     const key = `${post.chat.id}:${post.message_id}`;
     try {
-      if (!state.done.includes(key)) {
-        console.log(`${key}: ${await handlePost(post)}`);
-        state.done.push(key);
+      const known = state.done.includes(key);
+      if (!known || edited) {
+        const r = await handlePost(post, key, state);
+        if (typeof r === 'string') {
+          console.log(`${key}: ${r}${edited ? ' (edit)' : ''}`);
+        } else {
+          const { c, art } = r;
+          let target = state.ids[key];
+          if (edited && known && !target) {
+            // مطلبِ اصلِ این پیام قبل از ثبت ids ساخته شده — با عنوان پیدا می‌شود
+            const found = await joomla('GET', `${JC}/content/articles?page[limit]=10&search=${encodeURIComponent(c.title)}`);
+            const hit = (found.data || []).find(a => a.attributes.title === c.title);
+            if (hit) { target = hit.attributes.id; state.ids[key] = target; }
+          }
+          if (target && edited) {
+            await joomla('PATCH', `${JC}/content/articles/${target}`, { title: c.title, articletext: art, catid: c.catid });
+            console.log(`${key}: updated article ${target} (${c.kind})`);
+          } else if (target && !edited) {
+            console.log(`${key}: already article ${target} — skipped`);
+          } else {
+            const res = await createArticle({ title: c.title, articletext: art, catid: c.catid });
+            state.ids[key] = res.data.attributes.id;
+            console.log(`${key}: ${c.kind} article ${state.ids[key]}`);
+            if (!known) state.done.push(key);
+          }
+        }
       }
       state.lastUpdateId = u.update_id;
     } catch (e) {
@@ -144,7 +185,7 @@ async function main() {
         break;
       }
       errors.push(`${key}: ${e.message}`); // خطای دائمی — تلاش مجدد بی‌فایده
-      state.done.push(key);
+      if (!edited && !state.done.includes(key)) state.done.push(key);
       state.lastUpdateId = u.update_id;
       console.log(`${key}: fatal ${e.message}`);
     }
@@ -165,6 +206,10 @@ async function diag() {
     const m = await tg('getChatMember', { chat_id: process.env.TG_CHAT_ID, user_id: me.id }).catch(e => 'ERR ' + e.message);
     console.log('membership:', typeof m === 'string' ? m : m.status);
   }
+  try {
+    const up = await uploadMedia(MEDIA_DIR, `diag-test-${Date.now()}.txt`, Buffer.from('diag ' + new Date().toISOString()));
+    console.log('media upload test: OK');
+  } catch (e) { console.log('media upload test FAILED:', e.message.slice(0, 200)); }
   const arts = await joomla('GET', `${JC}/content/articles?page[limit]=5`);
   console.log('latest articles:');
   for (const a of arts.data || []) {
@@ -175,14 +220,9 @@ async function diag() {
   if (id) {
     const one = await joomla('GET', `${JC}/content/articles/${id}`);
     const x = one.data.attributes;
-    console.log(`article ${id}: created=${x.created} by=${x.created_by} cat=${x.catid} state=${x.state}`);
-    console.log('articletext[0:800]:', String(x.articletext).slice(0, 800));
-  }
-  for (const p of ['/', '/images', '/images/tg']) {
-    try {
-      const media = await joomla('GET', `${JC}/media?path=${encodeURIComponent(p)}`);
-      console.log(`media ${p}:`, (media.data || []).map(f => (f.attributes && (f.attributes.path || f.attributes.name)) || '?').slice(0, 40).join(' | '));
-    } catch (e) { console.log(`media ${p}: ${e.message.slice(0, 120)}`); }
+    console.log(`article ${id}: created=${x.created} by=${x.created_by} keys=${Object.keys(x).join(',')}`);
+    console.log('introtext[0:400]:', String(x.introtext || '').slice(0, 400));
+    console.log('fulltext[0:400]:', String(x.fulltext || '').slice(0, 400));
   }
 }
 

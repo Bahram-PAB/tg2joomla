@@ -19,5 +19,7 @@ assert.equal(toHtml('a<b\n\nc\nd'), '<p>a&lt;b</p>\n<p>c<br>d</p>');
 assert.equal(extOf('file.mp3', 'audio/mpeg'), 'mp3');
 assert.equal(extOf('', 'audio/ogg'), 'ogg');
 assert.equal(extOf('photos/file_42.jpg', 'image/jpeg'), 'jpg');
+assert.equal(extOf('', 'image/jpeg'), 'jpg');
+assert.equal(extOf('track.MP3', ''), 'mp3');
 
 console.log('OK');
