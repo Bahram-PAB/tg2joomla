@@ -1,0 +1,22 @@
+name: diag
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node bot.mjs diag
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          JOOMLA_BASE: ${{ secrets.JOOMLA_BASE }}
+          JOOMLA_TOKEN: ${{ secrets.JOOMLA_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}

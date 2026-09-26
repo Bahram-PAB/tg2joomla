@@ -155,6 +155,25 @@ async function main() {
   console.log(`updates=${updates.length}`);
 }
 
-if (process.env.TEST !== '1') await main();
+async function diag() {
+  for (const k of ['BOT_TOKEN', 'JOOMLA_BASE', 'JOOMLA_TOKEN']) if (!process.env[k]) throw new Error('Missing ' + k);
+  const h = await fetch(`${TG}/getWebhookInfo`).then(r => r.json());
+  console.log('webhook:', JSON.stringify(h.result));
+  const me = await tg('getMe');
+  console.log('bot:', me.username, me.id);
+  if (process.env.TG_CHAT_ID) {
+    const m = await tg('getChatMember', { chat_id: process.env.TG_CHAT_ID, user_id: me.id }).catch(e => 'ERR ' + e.message);
+    console.log('membership:', typeof m === 'string' ? m : m.status);
+  }
+  const arts = await joomla('GET', `${JC}/content/articles?page[limit]=5`);
+  console.log('latest articles:');
+  for (const a of JSON.parse(arts).data || []) {
+    const x = a.attributes;
+    console.log(`  id=${x.id} state=${x.state} featured=${x.featured} ${String(x.title).slice(0, 60)}`);
+  }
+}
+
+if (process.argv[2] === 'diag') await diag();
+else if (process.env.TEST !== '1') await main();
 
 export { parseStructured, toHtml, extOf };
