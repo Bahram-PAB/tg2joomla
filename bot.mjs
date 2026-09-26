@@ -208,14 +208,22 @@ async function diag() {
     console.log('membership:', typeof m === 'string' ? m : m.status);
   }
   try {
-    const dfn = `diag-test-${Date.now()}.jpg`;
-    // JPEG واقعی 1x1 برای تست کامل (پسوند مجاز + آداپتر + ساخت پوشه)
-    const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
-    await uploadMedia(MEDIA_DIR, dfn, px);
-    console.log('media upload test: OK');
-    await joomla('DELETE', `${JC}/media/files/${encodeURIComponent(`images:/${MEDIA_DIR}/${dfn}`)}`);
-    console.log('diag test file deleted');
-  } catch (e) { console.log('media upload test FAILED:', e.message.slice(0, 200)); }
+    const lst = await joomla('GET', `${JC}/media/files?path=/`);
+    console.log('media root listing:', JSON.stringify(lst.data || lst).slice(0, 400));
+  } catch (e) { console.log('media list FAILED:', e.message.slice(0, 150)); }
+  const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
+  const dfn = `diag-test-${Date.now()}.jpg`;
+  for (const [label, url, body] of [
+    ['query adapter path', `${JC}/media/files?path=${encodeURIComponent('images:/images/tg')}`, { name: dfn, content: px.toString('base64') }],
+    ['path in body', `${JC}/media/files`, { name: dfn, content: px.toString('base64'), path: 'images:/images/tg' }],
+    ['root + slashname', `${JC}/media/files?path=${encodeURIComponent('images:/')}`, { name: `tg/${dfn}`, content: px.toString('base64') }],
+  ]) {
+    try {
+      await joomla('POST', url, body);
+      console.log(`upload variant [${label}]: OK`);
+      break;
+    } catch (e) { console.log(`upload variant [${label}]: ${e.message.slice(0, 140)}`); }
+  }
   const arts = await joomla('GET', `${JC}/content/articles?page[limit]=5`);
   console.log('latest articles:');
   for (const a of arts.data || []) {
