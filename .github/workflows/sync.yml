@@ -1,0 +1,36 @@
+name: sync
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # UTC — هر ۵ دقیقه
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node test.mjs
+      - run: node bot.mjs
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          JOOMLA_BASE: ${{ secrets.JOOMLA_BASE }}
+          JOOMLA_TOKEN: ${{ secrets.JOOMLA_TOKEN }}
+          NEWS_CATEGORY_ID: ${{ secrets.NEWS_CATEGORY_ID }}
+          AUDIO_CATEGORY_ID: ${{ secrets.AUDIO_CATEGORY_ID }}
+      - name: commit state
+        run: |
+          git config user.name bot
+          git config user.email bot@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet || (git commit -m "state [skip ci]" && git push)
