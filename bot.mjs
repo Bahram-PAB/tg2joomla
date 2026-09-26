@@ -110,8 +110,8 @@ async function mediaFor(post, c, key, state) {
   const mime = c.kind === 'photo' ? 'image/jpeg' : c.audio.mime_type;
   if (state.files[key] === fid && state.fnames[key]) return state.fnames[key];
   const n = (state.fcount[key] || 0) + 1;
-  const fname = `tg-${post.message_id}${n > 1 ? '-' + n : ''}.${extOf(c.audio && c.audio.file_name, mime)}`;
-  const { buf } = await downloadFile(fid);
+  const { buf, name } = await downloadFile(fid);
+  const fname = `tg-${post.message_id}${n > 1 ? '-' + n : ''}.${extOf(name, mime)}`;
   await uploadMedia(dir, fname, buf);
   state.files[key] = fid; state.fnames[key] = fname; state.fcount[key] = n;
   return fname;
