@@ -62,7 +62,7 @@ async function joomla(method, url, body) {
 
 const createArticle = a => joomla('POST', `${JC}/content/articles`, { ...a, state: 1, language: LANGUAGE });
 const uploadMedia = (dir, name, buf) =>
-  joomla('POST', `${JC}/media?path=${encodeURIComponent(dir)}`, { path: name, content: buf.toString('base64') });
+  joomla('POST', `${JC}/media/files?path=${encodeURIComponent(dir)}`, { path: name, content: buf.toString('base64') });
 
 async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
@@ -207,8 +207,11 @@ async function diag() {
     console.log('membership:', typeof m === 'string' ? m : m.status);
   }
   try {
-    const up = await uploadMedia(MEDIA_DIR, `diag-test-${Date.now()}.txt`, Buffer.from('diag ' + new Date().toISOString()));
+    const dfn = `diag-test-${Date.now()}.txt`;
+    await uploadMedia(MEDIA_DIR, dfn, Buffer.from('diag ' + new Date().toISOString()));
     console.log('media upload test: OK');
+    await joomla('DELETE', `${JC}/media/files/${MEDIA_DIR}/${dfn}`);
+    console.log('diag test file deleted');
   } catch (e) { console.log('media upload test FAILED:', e.message.slice(0, 200)); }
   const arts = await joomla('GET', `${JC}/content/articles?page[limit]=5`);
   console.log('latest articles:');
