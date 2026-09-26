@@ -77,7 +77,11 @@ const uploadMedia = async (dir, name, buf) => {
 async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
   const res = await fetch(`${TG}/file/bot${BOT_TOKEN}/${f.file_path}`);
-  if (!res.ok) { const e = new Error(`TG download ${res.status}`); e.status = res.status; throw e; }
+  if (!res.ok) {
+    const e = new Error(`TG download ${res.status} (file_path=${f.file_path})`);
+    e.status = res.status === 404 ? 0 : res.status; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف TG_DL_MAX تلاش)
+    throw e;
+  }
   return { buf: Buffer.from(await res.arrayBuffer()), name: f.file_path.split('/').pop() };
 }
 
@@ -141,7 +145,7 @@ async function main() {
   if (missing.length) throw new Error('Missing secrets: ' + missing.join(', '));
 
   const state = loadState();
-  state.ids = state.ids || {}; state.files = state.files || {}; state.fnames = state.fnames || {}; state.fcount = state.fcount || {};
+  state.ids = state.ids || {}; state.files = state.files || {}; state.fnames = state.fnames || {}; state.fcount = state.fcount || {}; state.tries = state.tries || {};
   const updates = (await tg('getUpdates', { offset: state.lastUpdateId + 1, allowed_updates: ['channel_post', 'edited_channel_post'], timeout: 0 })) || [];
 
   // اجرای اول: تاریخچه انبوه (بیش از ۲ پیام معلق) منتشر نمی‌شود؛ پیام‌های تازه بلافاصله می‌روند
@@ -188,10 +192,13 @@ async function main() {
       }
       state.lastUpdateId = u.update_id;
     } catch (e) {
-      const retry = !e.status || e.status >= 500 || e.status === 429;
+      const dl404 = /TG download 404/.test(e.message);
+      const tries = (state.tries[key] || 0) + (dl404 ? 1 : 0);
+      if (dl404) state.tries[key] = tries;
+      const retry = !e.status || e.status >= 500 || e.status === 429 || (dl404 && tries < 10);
       if (retry) {
         state.lastUpdateId = u.update_id - 1; // اجرای بعدی از همین پیام ادامه می‌یابد
-        console.log(`${key}: retry-later ${e.message}`);
+        console.log(`${key}: retry-later (${dl404 ? 'dl404 #' + tries : ''} ${e.message})`);
         break;
       }
       errors.push(`${key}: ${e.message}`); // خطای دائمی — تلاش مجدد بی‌فایده
