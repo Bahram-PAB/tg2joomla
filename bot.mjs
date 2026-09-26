@@ -78,8 +78,9 @@ async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
   const res = await fetch(`${TG}/file/bot${BOT_TOKEN}/${f.file_path}`);
   if (!res.ok) {
-    const e = new Error(`TG download ${res.status} (file_path=${f.file_path})`);
-    e.status = res.status === 404 ? 0 : res.status; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف TG_DL_MAX تلاش)
+    const body = await res.text().catch(() => '');
+    const e = new Error(`TG download ${res.status} (file_path=${f.file_path}) ${body.slice(0, 120)}`);
+    e.status = res.status === 404 ? 0 : res.status; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف ۱۰ تلاش)
     throw e;
   }
   return { buf: Buffer.from(await res.arrayBuffer()), name: f.file_path.split('/').pop() };
