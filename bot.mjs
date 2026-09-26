@@ -117,8 +117,8 @@ async function main() {
   const state = loadState();
   const updates = (await tg('getUpdates', { offset: state.lastUpdateId + 1, allowed_updates: ['channel_post'], timeout: 0 })) || [];
 
-  // اجرای اول: فقط ثبت نقطه شروع — تاریخچه کانال منتشر نمی‌شود
-  if (state.lastUpdateId === 0 && updates.length) {
+  // اجرای اول: تاریخچه انبوه (بیش از ۲ پیام معلق) منتشر نمی‌شود؛ پیام‌های تازه بلافاصله می‌روند
+  if (state.lastUpdateId === 0 && updates.length > 2) {
     state.lastUpdateId = updates.at(-1).update_id;
     saveState(state);
     console.log(`baseline: skipped ${updates.length} old updates`);
