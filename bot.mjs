@@ -61,8 +61,9 @@ async function joomla(method, url, body) {
 }
 
 const createArticle = a => joomla('POST', `${JC}/content/articles`, { ...a, state: 1, language: LANGUAGE });
+// com_media: پوشه مقصد در query با پیشوند آداپتر (images:/images/tg) و نام فایل در فیلد name
 const uploadMedia = (dir, name, buf) =>
-  joomla('POST', `${JC}/media/files?path=${encodeURIComponent(dir)}`, { path: name, content: buf.toString('base64') });
+  joomla('POST', `${JC}/media/files?path=${encodeURIComponent(`images:/${dir}`)}`, { name, content: buf.toString('base64') });
 
 async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
@@ -207,10 +208,12 @@ async function diag() {
     console.log('membership:', typeof m === 'string' ? m : m.status);
   }
   try {
-    const dfn = `diag-test-${Date.now()}.txt`;
-    await uploadMedia(MEDIA_DIR, dfn, Buffer.from('diag ' + new Date().toISOString()));
+    const dfn = `diag-test-${Date.now()}.jpg`;
+    // JPEG واقعی 1x1 برای تست کامل (پسوند مجاز + آداپتر + ساخت پوشه)
+    const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
+    await uploadMedia(MEDIA_DIR, dfn, px);
     console.log('media upload test: OK');
-    await joomla('DELETE', `${JC}/media/files/${MEDIA_DIR}/${dfn}`);
+    await joomla('DELETE', `${JC}/media/files/${encodeURIComponent(`images:/${MEDIA_DIR}/${dfn}`)}`);
     console.log('diag test file deleted');
   } catch (e) { console.log('media upload test FAILED:', e.message.slice(0, 200)); }
   const arts = await joomla('GET', `${JC}/content/articles?page[limit]=5`);
