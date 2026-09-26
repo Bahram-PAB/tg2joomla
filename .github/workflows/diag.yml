@@ -1,6 +1,10 @@
 name: diag
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      article_id:
+        description: 'شناسه مطلب برای جزئیات (اختیاری)'
+        default: ''
 
 permissions:
   contents: read
@@ -14,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node bot.mjs diag
+      - run: node bot.mjs diag ${{ github.event.inputs.article_id }}
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           JOOMLA_BASE: ${{ secrets.JOOMLA_BASE }}
