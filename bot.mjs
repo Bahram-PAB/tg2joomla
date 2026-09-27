@@ -189,7 +189,10 @@ async function main() {
           if (txt.includes(OLD)) await joomla('PATCH', `${JC}/content/articles/${aid}`, { articletext: txt.split(OLD).join(NEW) });
         }
         console.log(`migrated ${fname} (article ${aid || '-'})`);
-      } catch (e) { console.log(`migrate ${fname}: ${e.message.slice(0, 140)}`); }
+      } catch (e) {
+        const dbg = JSON.stringify(src ? { keys: Object.keys(src), dataKeys: src.data ? (Array.isArray(src.data) ? 'array' : Object.keys(src.data)) : null, attrs: src.data && src.data.attributes ? Object.keys(src.data.attributes) : null } : { src: null });
+        console.log(`migrate ${fname}: ${e.message.slice(0, 100)} | ${dbg.slice(0, 220)}`);
+      }
     }
     state.media_migrated = true;
     saveState(state);
