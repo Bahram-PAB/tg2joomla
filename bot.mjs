@@ -177,7 +177,7 @@ async function main() {
     const OLD = '/images/images/tg/', NEW = '/images/tg/';
     for (const [k, fname] of Object.entries(state.fnames)) {
       try {
-        const src = await joomla('GET', `${JC}/media/files?path=${encodeURIComponent(`local-images:/images/images/tg/${fname}`)}&content=1`);
+        const src = await joomla('GET', `${JC}/media/files?${new URLSearchParams({ path: `local-images:/images/images/tg/${fname}`, content: '1' })}`);
         const b64 = src.data.attributes.content;
         if (!b64) throw new Error('no content returned');
         await uploadMedia('tg', fname, Buffer.from(b64, 'base64'));
