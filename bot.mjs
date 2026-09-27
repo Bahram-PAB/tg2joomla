@@ -153,9 +153,9 @@ async function handlePost(post, key, state) {
     return { c, art: c.html + `\n<p><a href="${u}">🔊 شنیدن این فایل صوتی در تلگرام</a></p>`, tooBig: true };
   }
   const art = c.kind === 'photo'
-    ? `<figure><img src="/images/${dir}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
+    ? `<figure><img src="/images/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
     : c.kind === 'audio'
-      ? `<audio controls src="/images/${dir}/${fname}"></audio>${c.html ? '\n' + c.html : ''}`
+      ? `<audio controls src="/images/${AUDIO_DIR}/${fname}"></audio>${c.html ? '\n' + c.html : ''}`
       : c.html;
   return { c, art };
 }
