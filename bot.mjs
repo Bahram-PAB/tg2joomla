@@ -211,12 +211,15 @@ async function main() {
       state.lastUpdateId = u.update_id;
     } catch (e) {
       const dl404 = /TG download 404/.test(e.message);
-      const tries = (state.tries[key] || 0) + (dl404 ? 1 : 0);
-      if (dl404) state.tries[key] = tries;
-      const retry = dl404 ? tries < 10 : (!e.status || e.status >= 500 || e.status === 429);
+      const soft = !e.status || e.status >= 500 || e.status === 429; // خطای موقت شبکه/سرور
+      const tries = (state.tries[key] || 0) + (soft || dl404 ? 1 : 0);
+      if (soft || dl404) state.tries[key] = tries;
+      const cap = dl404 ? 10 : 3;
+      const retry = (soft || dl404) && tries < cap;
       if (retry) {
         state.lastUpdateId = u.update_id - 1; // اجرای بعدی از همین پیام ادامه می‌یابد
-        console.log(`${key}: retry-later (${dl404 ? 'dl404 #' + tries : ''} ${e.message})`);
+        const hint = /properties of undefined/.test(e.message) ? ' post=' + JSON.stringify(post).slice(0, 300) : '';
+        console.log(`${key}: retry-later #${tries} ${e.message}${hint}`);
         break;
       }
       errors.push(`${key}: ${e.message}`); // خطای دائمی — تلاش مجدد بی‌فایده
