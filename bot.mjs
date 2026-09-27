@@ -205,7 +205,7 @@ async function main() {
       const dl404 = /TG download 404/.test(e.message);
       const tries = (state.tries[key] || 0) + (dl404 ? 1 : 0);
       if (dl404) state.tries[key] = tries;
-      const retry = !e.status || e.status >= 500 || e.status === 429 || (dl404 && tries < 10);
+      const retry = dl404 ? tries < 10 : (!e.status || e.status >= 500 || e.status === 429);
       if (retry) {
         state.lastUpdateId = u.update_id - 1; // اجرای بعدی از همین پیام ادامه می‌یابد
         console.log(`${key}: retry-later (${dl404 ? 'dl404 #' + tries : ''} ${e.message})`);
