@@ -2,6 +2,7 @@
 // ساختار پیام: سطر اول = عنوان مطلب، سطرهای بعدی = متن مطلب
 // ویرایش پیام کانال → به‌روزرسانی همان مطلب در جوملا (بدون ساخت مطلب تکراری)
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const JOOMLA_BASE = (process.env.JOOMLA_BASE || '').replace(/\/+$/, '');
@@ -74,16 +75,23 @@ const uploadMedia = async (dir, name, buf) => {
   return joomla('POST', `${JC}/media/files`, { path: `local-images:/${dir}/${name}`, content: buf.toString('base64') });
 };
 
+// دانلود فایل تلگرام — با curl (node fetch/undici روی GH runners از تلگرام 404 می‌گیرد؛ curl تست‌شده سالم است)
+function curlDownload(url) {
+  return execSync(`curl -sS --max-time 180 "${url}"`, { maxBuffer: 512 * 1024 * 1024 });
+}
+
 async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
-  const res = await fetch(`${TG}/file/bot${BOT_TOKEN}/${f.file_path}`);
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    const e = new Error(`TG download ${res.status} (file_path=${f.file_path}) ${body.slice(0, 120)}`);
-    e.status = res.status === 404 ? 0 : res.status; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف ۱۰ تلاش)
+  const url = `${TG}/file/bot${BOT_TOKEN}/${f.file_path}`;
+  const buf = curlDownload(url);
+  if (!buf || buf.length < 8) throw new Error(`TG download empty (file_path=${f.file_path})`);
+  if (buf.slice(0, 10).toString().startsWith('{"ok":false')) {
+    const code = (buf.toString().match(/"error_code":(\d+)/) || [])[1] || 'ERR';
+    const e = new Error(`TG download ${code} (file_path=${f.file_path}) ${buf.toString().slice(0, 120)}`);
+    e.status = code === '404' ? 0 : 500; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف ۱۰ تلاش)
     throw e;
   }
-  return { buf: Buffer.from(await res.arrayBuffer()), name: f.file_path.split('/').pop() };
+  return { buf, name: f.file_path.split('/').pop() };
 }
 
 // تعیین نوع پیام و تولید محتوای مطلب از روی آن
