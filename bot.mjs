@@ -9,8 +9,8 @@ const JOOMLA_BASE = (process.env.JOOMLA_BASE || '').replace(/\/+$/, '');
 const JOOMLA_TOKEN = process.env.JOOMLA_TOKEN;
 const CAT_TEXT = process.env.NEWS_CATEGORY_ID;
 const CAT_AUDIO = process.env.AUDIO_CATEGORY_ID;
-const MEDIA_DIR = process.env.MEDIA_DIR || 'images/tg';
-const AUDIO_DIR = process.env.AUDIO_DIR || 'images/tg-audio';
+const MEDIA_DIR = process.env.MEDIA_DIR || 'tg';
+const AUDIO_DIR = process.env.AUDIO_DIR || 'tg-audio';
 const LANGUAGE = process.env.JOOMLA_LANGUAGE || '*';
 const STATE_FILE = process.env.STATE_FILE || 'state/processed.json';
 const TG = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -153,9 +153,9 @@ async function handlePost(post, key, state) {
     return { c, art: c.html + `\n<p><a href="${u}">🔊 شنیدن این فایل صوتی در تلگرام</a></p>`, tooBig: true };
   }
   const art = c.kind === 'photo'
-    ? `<figure><img src="/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
+    ? `<figure><img src="/images/${dir}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
     : c.kind === 'audio'
-      ? `<audio controls src="/${AUDIO_DIR}/${fname}"></audio>${c.html ? '\n' + c.html : ''}`
+      ? `<audio controls src="/images/${dir}/${fname}"></audio>${c.html ? '\n' + c.html : ''}`
       : c.html;
   return { c, art };
 }
