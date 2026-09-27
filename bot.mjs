@@ -234,7 +234,8 @@ async function diag() {
     console.log('membership:', typeof m === 'string' ? m : m.status);
   }
   // آزمون تعیین‌کننده: عکس تازه توسط خود بات ارسال و بلافاصله دانلود می‌شود
-  if (process.env.TG_CHAT_ID) {
+  const chat = process.env.TG_CHAT_ID;
+  if (chat) {
     try {
       const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
       const fd = new FormData();
