@@ -172,29 +172,18 @@ async function main() {
 
   const state = loadState();
   state.ids = state.ids || {}; state.files = state.files || {}; state.fnames = state.fnames || {}; state.fcount = state.fcount || {}; state.tries = state.tries || {};
-  // یک‌بار: انتقال رسانه از images/images/tg (اشتباه قبلی) به tg + اصلاح URL در مطالب
+  // یک‌بار: اصلاح URL داخل مطالب عکس‌دار (فایل‌ها را خود کاربر به images/tg منتقل می‌کند)
   if (!state.media_migrated) {
     const OLD = '/images/images/tg/', NEW = '/images/tg/';
-    for (const [k, fname] of Object.entries(state.fnames)) {
-      let src;
+    for (const [k, aid] of Object.entries(state.ids)) {
       try {
-        src = await joomla('GET', `${JC}/media/files?${new URLSearchParams({ path: `local-images:/images/tg/${fname}`, content: '1' })}`);
-        const item = Array.isArray(src.data) ? src.data[0] : src.data;
-        const b64 = item.attributes.content;
-        if (!b64) throw new Error('no content returned');
-        await uploadMedia('tg', fname, Buffer.from(b64, 'base64'));
-        await joomla('DELETE', `${JC}/media/files/${encodeURIComponent(`local-images:/images/tg/${fname}`)}`);
-        const aid = state.ids[k];
-        if (aid) {
-          const one = await joomla('GET', `${JC}/content/articles/${aid}`);
-          const txt = String(one.data.attributes.text || '');
-          if (txt.includes(OLD)) await joomla('PATCH', `${JC}/content/articles/${aid}`, { articletext: txt.split(OLD).join(NEW) });
+        const one = await joomla('GET', `${JC}/content/articles/${aid}`);
+        const txt = String(one.data.attributes.text || '');
+        if (txt.includes(OLD)) {
+          await joomla('PATCH', `${JC}/content/articles/${aid}`, { articletext: txt.split(OLD).join(NEW) });
+          console.log(`url-fixed article ${aid}`);
         }
-        console.log(`migrated ${fname} (article ${aid || '-'})`);
-      } catch (e) {
-        const dbg = JSON.stringify(src ? { keys: Object.keys(src), dataKeys: src.data ? (Array.isArray(src.data) ? 'array' : Object.keys(src.data)) : null, attrs: src.data && src.data.attributes ? Object.keys(src.data.attributes) : null } : { src: null });
-        console.log(`migrate ${fname}: ${e.message.slice(0, 100)} | ${dbg.slice(0, 220)}`);
-      }
+      } catch (e) { console.log(`url-fix article ${aid}: ${e.message.slice(0, 140)}`); }
     }
     state.media_migrated = true;
     saveState(state);
