@@ -172,6 +172,29 @@ async function main() {
 
   const state = loadState();
   state.ids = state.ids || {}; state.files = state.files || {}; state.fnames = state.fnames || {}; state.fcount = state.fcount || {}; state.tries = state.tries || {};
+  // یک‌بار: انتقال رسانه از images/images/tg (اشتباه قبلی) به tg + اصلاح URL در مطالب
+  if (!state.media_migrated) {
+    const OLD = '/images/images/tg/', NEW = '/images/tg/';
+    for (const [k, fname] of Object.entries(state.fnames)) {
+      try {
+        const src = await joomla('GET', `${JC}/media/files?path=${encodeURIComponent(`local-images:/images/images/tg/${fname}`)}&content=1`);
+        const b64 = src.data.attributes.content;
+        if (!b64) throw new Error('no content returned');
+        await uploadMedia('tg', fname, Buffer.from(b64, 'base64'));
+        await joomla('DELETE', `${JC}/media/files/${encodeURIComponent(`local-images:/images/images/tg/${fname}`)}`);
+        const aid = state.ids[k];
+        if (aid) {
+          const one = await joomla('GET', `${JC}/content/articles/${aid}`);
+          const txt = String(one.data.attributes.text || '');
+          if (txt.includes(OLD)) await joomla('PATCH', `${JC}/content/articles/${aid}`, { articletext: txt.split(OLD).join(NEW) });
+        }
+        console.log(`migrated ${fname} (article ${aid || '-'})`);
+      } catch (e) { console.log(`migrate ${fname}: ${e.message.slice(0, 140)}`); }
+    }
+    state.media_migrated = true;
+    saveState(state);
+  }
+
   const updates = (await tg('getUpdates', { offset: state.lastUpdateId + 1, allowed_updates: ['channel_post', 'edited_channel_post'], timeout: 0 })) || [];
 
   // اجرای اول: تاریخچه انبوه (بیش از ۲ پیام معلق) منتشر نمی‌شود؛ پیام‌های تازه بلافاصله می‌روند
