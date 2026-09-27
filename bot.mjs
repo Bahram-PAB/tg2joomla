@@ -286,9 +286,12 @@ async function diag() {
     } catch (e) { console.log('fresh TG upload+download FAILED:', e.message.slice(0, 160)); }
   }
   try {
-    const lst = await joomla('GET', `${JC}/media/files?path=/`);
-    console.log('media root listing:', JSON.stringify(lst.data || lst).slice(0, 400));
-  } catch (e) { console.log('media list FAILED:', e.message.slice(0, 150)); }
+    for (const p of ['local-images:/images/tg', 'local-images:/tg']) {
+      const m = await joomla('GET', `${JC}/media/files?path=${encodeURIComponent(p)}`);
+      const items = (m.data || []).map(f => f.attributes && f.attributes.name).join(' | ');
+      console.log(`dir ${p}: ${items || '(empty)'}`);
+    }
+  } catch (e) { console.log('tg dir listing FAILED:', e.message.slice(0, 120)); }
   const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
   const dfn = `diag-test-${Date.now()}.jpg`;
   for (const [label, url, body] of [
