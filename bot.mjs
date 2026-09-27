@@ -244,8 +244,25 @@ async function diag() {
       const sent = await fetch(`${TG}/sendPhoto`, { method: 'POST', body: fd }).then(r => r.json());
       if (!sent.ok) throw new Error('sendPhoto: ' + JSON.stringify(sent).slice(0, 120));
       const fid = sent.result.photo[sent.result.photo.length - 1].file_id;
-      await downloadFile(fid);
-      console.log('fresh TG upload+download: OK (bot can download fresh media)');
+      const { execSync } = await import('node:child_process');
+      let dlOk = false;
+      for (let i = sent.result.photo.length - 1; i >= 0 && !dlOk; i--) {
+        const fp = (await tg('getFile', { file_id: sent.result.photo[i].file_id })).file_path;
+        for (const tool of ['node', 'curl']) {
+          try {
+            if (tool === 'curl') execSync(`curl -sS -o /dev/null -w "%{http_code}" "https://api.telegram.org/file/bot${BOT_TOKEN}/${fp}"`, { stdio: ['ignore', 'pipe', 'pipe'] });
+            else await downloadFile(sent.result.photo[i].file_id);
+            console.log(`fresh size ${i} via ${tool}: OK`);
+            dlOk = true;
+            break;
+          } catch (e) {
+            const out = String(e.stdout || e.message || '').slice(-160).replace(/\n/g, ' ');
+            console.log(`fresh size ${i} via ${tool}: FAIL ${out}`);
+          }
+        }
+      }
+      if (dlOk) console.log('CONCLUSION: node/fetch issue — switch download to curl');
+      else console.log('CONCLUSION: Telegram blocks file downloads from GitHub runners — need proxy');
       await tg('deleteMessage', { chat_id: process.env.TG_CHAT_ID, message_id: sent.result.message_id }).catch(() => {});
     } catch (e) { console.log('fresh TG upload+download FAILED:', e.message.slice(0, 160)); }
   }
