@@ -179,7 +179,8 @@ async function main() {
       let src;
       try {
         src = await joomla('GET', `${JC}/media/files?${new URLSearchParams({ path: `local-images:/images/tg/${fname}`, content: '1' })}`);
-        const b64 = src.data.attributes.content;
+        const item = Array.isArray(src.data) ? src.data[0] : src.data;
+        const b64 = item.attributes.content;
         if (!b64) throw new Error('no content returned');
         await uploadMedia('tg', fname, Buffer.from(b64, 'base64'));
         await joomla('DELETE', `${JC}/media/files/${encodeURIComponent(`local-images:/images/tg/${fname}`)}`);
