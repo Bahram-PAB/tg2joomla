@@ -233,6 +233,21 @@ async function diag() {
     const m = await tg('getChatMember', { chat_id: process.env.TG_CHAT_ID, user_id: me.id }).catch(e => 'ERR ' + e.message);
     console.log('membership:', typeof m === 'string' ? m : m.status);
   }
+  // آزمون تعیین‌کننده: عکس تازه توسط خود بات ارسال و بلافاصله دانلود می‌شود
+  if (process.env.TG_CHAT_ID) {
+    try {
+      const px = Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==', 'base64');
+      const fd = new FormData();
+      fd.append('chat_id', process.env.TG_CHAT_ID);
+      fd.append('photo', new Blob([px], { type: 'image/jpeg' }), 't.jpg');
+      const sent = await fetch(`${TG}/sendPhoto`, { method: 'POST', body: fd }).then(r => r.json());
+      if (!sent.ok) throw new Error('sendPhoto: ' + JSON.stringify(sent).slice(0, 120));
+      const fid = sent.result.photo[sent.result.photo.length - 1].file_id;
+      await downloadFile(fid);
+      console.log('fresh TG upload+download: OK (bot can download fresh media)');
+      await tg('deleteMessage', { chat_id: process.env.TG_CHAT_ID, message_id: sent.result.message_id }).catch(() => {});
+    } catch (e) { console.log('fresh TG upload+download FAILED:', e.message.slice(0, 160)); }
+  }
   try {
     const lst = await joomla('GET', `${JC}/media/files?path=/`);
     console.log('media root listing:', JSON.stringify(lst.data || lst).slice(0, 400));
