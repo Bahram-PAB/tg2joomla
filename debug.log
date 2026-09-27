@@ -4,3 +4,6 @@
 2026-09-27T07:19:32.752Z
 -1001042002375:2142: TG download 404 (file_path=photos/file_3.jpg) {"ok":false,"error_code":404,"description":"Not Found"}
 
+2026-09-27T07:24:10.894Z
+-1001042002375:2117: TG download 404 (file_path=photos/file_7.jpg) {"ok":false,"error_code":404,"description":"Not Found"}
+
