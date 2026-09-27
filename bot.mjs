@@ -143,7 +143,7 @@ async function mediaFor(post, c, key, state) {
 async function handlePost(post, key, state) {
   const c = buildContent(post);
   if (['photo-no-caption-skipped', 'structure-skipped', 'type-skipped'].includes(c.kind)) return c.kind;
-  const fname = await mediaFor(post, c, key, state);
+  const fname = c.kind === 'photo' || c.kind === 'audio' ? await mediaFor(post, c, key, state) : null;
   const art = c.kind === 'photo'
     ? `<figure><img src="/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
     : c.kind === 'audio'
