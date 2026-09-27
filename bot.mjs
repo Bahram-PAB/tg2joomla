@@ -143,7 +143,15 @@ async function mediaFor(post, c, key, state) {
 async function handlePost(post, key, state) {
   const c = buildContent(post);
   if (['photo-no-caption-skipped', 'structure-skipped', 'type-skipped'].includes(c.kind)) return c.kind;
-  const fname = c.kind === 'photo' || c.kind === 'audio' ? await mediaFor(post, c, key, state) : null;
+  const fname = c.kind === 'photo' || c.kind === 'audio' ? await mediaFor(post, c, key, state).catch(e => {
+    if (/file is too big/.test(e.message)) return null; // >20MB: قابل دانلود نیست — مطلب با لینک تلگرام ساخته می‌شود
+    throw e;
+  }) : null;
+  if (!fname && c.kind === 'audio') {
+    const u = post.chat.username ? `https://t.me/${post.chat.username}/${post.message_id}` : '';
+    if (!u) return 'too-big-no-username-skipped';
+    return { c, art: c.html + `\n<p><a href="${u}">🔊 شنیدن این فایل صوتی در تلگرام</a></p>`, tooBig: true };
+  }
   const art = c.kind === 'photo'
     ? `<figure><img src="/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
     : c.kind === 'audio'
