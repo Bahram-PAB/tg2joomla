@@ -6,3 +6,8 @@ latest.json
 plogs/
 logs/
 *.zip
+sync/
+probe/
+0_*.txt
+debug.log
+tme_*.jpg
