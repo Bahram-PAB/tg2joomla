@@ -73,14 +73,8 @@ const ensureDir = async dir => {
 };
 const uploadMedia = async (dir, name, buf) => {
   await ensureDir(dir);
-  const path = `local-images:/${dir}/${name}`;
-  try {
-    return await joomla('POST', `${JC}/media/files`, { path, content: buf.toString('base64') });
-  } catch (e) {
-    if (!/File exists/.test(String(e.message))) throw e;
-    await joomla('DELETE', `${JC}/media/files?path=${encodeURIComponent(path)}`); // جایگزینی فایل خراب
-    return joomla('POST', `${JC}/media/files`, { path, content: buf.toString('base64') });
-  }
+  // override: true در بدنه = بازنویسی فایل موجود (DELETE route برای فایل وجود ندارد)
+  return joomla('POST', `${JC}/media/files`, { path: `local-images:/${dir}/${name}`, content: buf.toString('base64'), override: true });
 };
 
 // دانلود فایل تلگرام — با curl (node fetch/undici روی GH runners از تلگرام 404 می‌گیرد؛ curl تست‌شده سالم است)
