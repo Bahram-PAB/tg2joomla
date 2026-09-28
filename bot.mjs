@@ -15,6 +15,7 @@ const LANGUAGE = process.env.JOOMLA_LANGUAGE || '*';
 const STATE_FILE = process.env.STATE_FILE || 'state/processed.json';
 const TG = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const JC = `${JOOMLA_BASE}/api/index.php/v1`;
+const CHANNEL = process.env.TG_CHANNEL || 'koohnameh';
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -104,6 +105,40 @@ async function downloadFile(fileId) {
   return { buf, name: f.file_path.split('/').pop() };
 }
 
+// دانلود از صفحهٔ عمومی کانال — وقتی لینک Bot API منقضی شده (فایل قدیمی)؛
+// t.me/s/<channel>/<id> همیشه در دسترس است و URL عکس را می‌دهد
+function downloadFromChannelPage(msgId) {
+  const html = execSync(`curl -sS --max-time 20 "https://t.me/s/${CHANNEL}/${msgId}"`, { maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+  // فقط ناحیهٔ همین پیام — صفحه پیام‌های اطراف را هم رندر می‌کند
+  const idx = html.indexOf(`data-post="${CHANNEL}/${msgId}"`);
+  if (idx < 0) throw new Error(`channel page: msg ${msgId} not found`);
+  const next = html.indexOf('data-post="', idx + 10);
+  const seg = html.slice(idx, next > 0 ? next : idx + 10000);
+  const m = seg.match(/background-image:\s*url\(([^)]+)\)/);
+  if (!m) throw new Error(`channel page: no photo in msg ${msgId}`);
+  const url = m[1].trim().replace(/^['"]|['"]$/g, '');
+  const buf = execSync(`curl -sS -f --max-time 60 "${url}"`, { maxBuffer: 512 * 1024 * 1024 });
+  const head = buf.slice(0, 4).toString('hex');
+  if (head.startsWith('ffd8')) return { buf, name: `${msgId}.jpg` };
+  if (head.startsWith('8950')) return { buf, name: `${msgId}.png` };
+  throw new Error(`channel page: not an image (head=${head})`);
+}
+
+// دانلود رسانه: Bot API (ریترای 404) → در نهایت صفحهٔ عمومی کانال
+async function resolveMediaBuffer(fid, msgId, tries = 2) {
+  let lastErr;
+  for (let a = 1; a <= tries; a++) {
+    try { return await downloadFile(fid); }
+    catch (e) {
+      lastErr = e;
+      if (!/TG download 404/.test(e.message)) throw e;
+      if (a < tries) await new Promise(r => setTimeout(r, 15000));
+    }
+  }
+  try { return downloadFromChannelPage(msgId); }
+  catch { throw lastErr; } // پیام خطای اصلی حفظ شود (سقف تلاش شناخته شود)
+}
+
 // تعیین نوع پیام و تولید محتوای مطلب از روی آن
 function buildContent(post) {
   const audio = post.audio || (post.document && String(post.document.mime_type || '').startsWith('audio/') && post.document);
@@ -135,13 +170,18 @@ async function mediaFor(post, c, key, state) {
   const n = (state.fcount[key] || 0) + 1;
   let buf, name;
   if (c.kind === 'photo') {
-    // از بزرگ‌ترین سایز شروع کن؛ اگر 404 داد، سایز کوچک‌تر را امتحان کن
-    for (let i = c.photos.length - 1; i >= 0; i--) {
-      try { ({ buf, name } = await downloadFile(c.photos[i].file_id)); break; }
-      catch (e) { if (i === 0 || !/TG download 404/.test(e.message)) throw e; console.log(`  photo size ${i} failed, trying smaller…`); }
+    // از بزرگ‌ترین سایز شروع کن؛ همه 404 دادند → صفحهٔ عمومی کانال
+    try {
+      for (let i = c.photos.length - 1; i >= 0; i--) {
+        try { ({ buf, name } = await downloadFile(c.photos[i].file_id)); break; }
+        catch (e) { if (i === 0 || !/TG download 404/.test(e.message)) throw e; console.log(`  photo size ${i} failed, trying smaller…`); }
+      }
+    } catch (e) {
+      if (!/TG download 404/.test(e.message)) throw e;
+      ({ buf, name } = downloadFromChannelPage(post.message_id)); // لینک Bot API منقضی شده
     }
   } else {
-    ({ buf, name } = await downloadFile(fid));
+    ({ buf, name } = await resolveMediaBuffer(fid, post.message_id));
   }
   const fname = `tg-${post.message_id}${n > 1 ? '-' + n : ''}.${extOf(name, mime)}`;
   await uploadMedia(dir, fname, buf);
@@ -196,12 +236,10 @@ async function main() {
         const head = Buffer.from(content, 'base64').slice(0, 16).toString();
         if (!head.startsWith('{"ok":false')) continue; // سالم است
         console.log(`repair ${fname}: stored file is TG error JSON, re-downloading…`);
-        // 404 دانلود تلگرام دوره‌ای است — با فاصله تلاش کن
-        let ok = false;
-        for (let a = 1; a <= 3 && !ok; a++) {
-          try { const { buf } = await downloadFile(fid); await uploadMedia(dir, fname, buf); console.log(`repair ${fname}: re-uploaded ${buf.length} bytes (attempt ${a})`); ok = true; }
-          catch (e) { if (!/TG download 404/.test(e.message) || a === 3) throw e; console.log(`repair ${fname}: attempt ${a} got 404, waiting 15s…`); await new Promise(r => setTimeout(r, 15000)); }
-        }
+        // Bot API (۲ تلاش) → در صورت انقضا، صفحهٔ عمومی کانال
+        const { buf } = await resolveMediaBuffer(fid, k.split(':')[1]);
+        await uploadMedia(dir, fname, buf);
+        console.log(`repair ${fname}: re-uploaded ${buf.length} bytes`);
       } catch (e) { console.log(`repair ${fname}: ${e.message.slice(0, 140)}`); repairFailed = true; }
     }
     // اصلاح URL قدیمی داخل مطالب (در صورت وجود)
@@ -239,6 +277,7 @@ async function main() {
     const post = u.edited_channel_post || u.channel_post;
     const edited = !!u.edited_channel_post;
     if (!post) { state.lastUpdateId = u.update_id; continue; }
+    if (post.chat.username) state.channel = post.chat.username; // برای fallback t.me/s/
     const key = `${post.chat.id}:${post.message_id}`;
     try {
       const known = state.done.includes(key);
