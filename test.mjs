@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 
 process.env.TEST = '1';
-const { parseStructured, toHtml, extOf } = await import('./bot.mjs');
+const { parseStructured, toHtml, extOf, denied, buildContent } = await import('./bot.mjs');
 
 // سطر اول عنوان + بدنه
 assert.deepEqual(parseStructured('آندرژ بارگیل عازم دائولاگیری می شود\n\nمتن کامل خبر اینجاست.'), {
@@ -21,5 +21,16 @@ assert.equal(extOf('', 'audio/ogg'), 'ogg');
 assert.equal(extOf('photos/file_42.jpg', 'image/jpeg'), 'jpg');
 assert.equal(extOf('', 'image/jpeg'), 'jpg');
 assert.equal(extOf('track.MP3', ''), 'mp3');
+
+// فیلتر پیام‌های غیرخبری
+assert.equal(denied('🏔 پیش‌بینی یکشنبه 5 مهر'), true);
+assert.equal(denied('📡 گزارش کانال‌های فعال امروز'), true);
+assert.equal(denied('🔥 پست‌های داغ امروز'), true);
+assert.equal(denied('پادکست روزانه ۲۶ مهر'), true);
+assert.equal(denied('صعود تازه به دیواره علم‌کوه'), false);
+assert.equal(denied('پیش‌بینی بارش برف در ارتفاعات البرز'), false); // خبر واقعی با «پیش‌بینی» رد نمی‌شود
+// ساخت محتوا: پیام هوا → denied؛ خبر عادی → text
+assert.equal(buildContent({ text: '🏔 پیش‌بینی یکشنبه 5 مهر\n\n━━━\n⛰️ دماوند' }).kind, 'denied');
+assert.equal(buildContent({ text: 'صعود دیواره علم‌کوه\n\nخبر کامل اینجاست.' }).kind, 'text');
 
 console.log('OK');

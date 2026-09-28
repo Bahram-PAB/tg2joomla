@@ -25,8 +25,6 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           JOOMLA_BASE: ${{ secrets.JOOMLA_BASE }}
           JOOMLA_TOKEN: ${{ secrets.JOOMLA_TOKEN }}
-          NEWS_CATEGORY_ID: ${{ secrets.NEWS_CATEGORY_ID }}
-          AUDIO_CATEGORY_ID: ${{ secrets.AUDIO_CATEGORY_ID }}
       - name: commit state
         run: |
           git config user.name bot

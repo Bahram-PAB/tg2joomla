@@ -7,8 +7,7 @@ import { execSync } from 'node:child_process';
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const JOOMLA_BASE = (process.env.JOOMLA_BASE || '').replace(/\/+$/, '');
 const JOOMLA_TOKEN = process.env.JOOMLA_TOKEN;
-const CAT_TEXT = process.env.NEWS_CATEGORY_ID;
-const CAT_AUDIO = process.env.AUDIO_CATEGORY_ID;
+const CAT_TEXT = '90'; // دسته «مطالب نویسندگان» — همه مطالب اینجا و state:0 تا ادمین منتشر کند
 const MEDIA_DIR = process.env.MEDIA_DIR || 'tg';
 const AUDIO_DIR = process.env.AUDIO_DIR || 'tg-audio';
 const LANGUAGE = process.env.JOOMLA_LANGUAGE || '*';
@@ -62,7 +61,7 @@ async function joomla(method, url, body) {
   return text ? JSON.parse(text) : null;
 }
 
-const createArticle = a => joomla('POST', `${JC}/content/articles`, { ...a, state: 1, language: LANGUAGE });
+const createArticle = a => joomla('POST', `${JC}/content/articles`, { ...a, state: 0, language: LANGUAGE }); // state:0 = منتشر نشده (بررسی ادمین)
 // API جوملا ۶: path در بدنه، با نام آداپتر local-images؛ نقطه در path = فایل، بدون نقطه = پوشه
 const ensureDir = async dir => {
   const segs = dir.split('/');
@@ -140,23 +139,36 @@ async function resolveMediaBuffer(fid, msgId, tries = 2) {
   catch { throw lastErr; } // پیام خطای اصلی حفظ شود (سقف تلاش شناخته شود)
 }
 
+// فیلتر پیام‌هایی که نباید به سایت بروند (بر اساس عنوان)
+const DENY = [
+  /^🏔\s*پیش‌بینی/,        // پیش‌بینی آب‌وهوای قله‌ها
+  /گزارش کانال‌های فعال/,  // 📡 گزارش کانال‌های فعال امروز
+  /پست‌های داغ/,           // 🔥 پست‌های داغ امروز
+  /پادکست روزانه/,          // پادکست روزانه
+];
+const denied = title => DENY.some(re => re.test(title));
+
 // تعیین نوع پیام و تولید محتوای مطلب از روی آن
 function buildContent(post) {
   const audio = post.audio || (post.document && String(post.document.mime_type || '').startsWith('audio/') && post.document);
   if (audio) {
     const cap = (post.caption || '').trim();
     const p = cap ? parseStructured(cap) : null;
-    return { kind: 'audio', audio, title: p ? p.title : (audio.file_name || 'فایل صوتی').replace(/\.[a-z0-9]+$/i, ''), html: p ? toHtml(p.body) : '', catid: CAT_AUDIO };
+    const title = p ? p.title : (audio.file_name || 'فایل صوتی').replace(/\.[a-z0-9]+$/i, '');
+    if (denied(title)) return { kind: 'denied' };
+    return { kind: 'audio', audio, title, html: p ? toHtml(p.body) : '', catid: CAT_TEXT };
   }
   if (post.photo) {
     if (!post.caption) return { kind: 'photo-no-caption-skipped' };
     const p = parseStructured(post.caption);
     if (!p) return { kind: 'structure-skipped' };
+    if (denied(p.title)) return { kind: 'denied' };
     return { kind: 'photo', photos: post.photo, title: p.title, html: toHtml(p.body), alt: esc(p.title), catid: CAT_TEXT };
   }
   if (post.text) {
     const p = parseStructured(post.text);
     if (!p) return { kind: 'structure-skipped' };
+    if (denied(p.title)) return { kind: 'denied' };
     return { kind: 'text', title: p.title, html: toHtml(p.body), catid: CAT_TEXT };
   }
   return { kind: 'type-skipped' };
@@ -218,7 +230,7 @@ const loadState = () => {
 const saveState = s => { fs.mkdirSync(STATE_FILE.replace(/\/[^/]+$/, ''), { recursive: true }); fs.writeFileSync(STATE_FILE, JSON.stringify(s)); };
 
 async function main() {
-  const missing = ['BOT_TOKEN', 'JOOMLA_BASE', 'JOOMLA_TOKEN', 'NEWS_CATEGORY_ID', 'AUDIO_CATEGORY_ID'].filter(k => !process.env[k]);
+  const missing = ['BOT_TOKEN', 'JOOMLA_BASE', 'JOOMLA_TOKEN'].filter(k => !process.env[k]);
   if (missing.length) throw new Error('Missing secrets: ' + missing.join(', '));
 
   const state = loadState();
@@ -286,6 +298,7 @@ async function main() {
         const r = await handlePost(post, key, state);
         if (typeof r === 'string') {
           console.log(`${key}: ${r}${edited ? ' (edit)' : ''}`);
+          if (!known) state.done.push(key); // ردشده برای همیشه رد می‌شود؛ ویرایش بعدی دوباره بررسی می‌شود
         } else {
           const { c, art } = r;
           let target = state.ids[key];
@@ -296,7 +309,7 @@ async function main() {
             if (hit) { target = hit.attributes.id; state.ids[key] = target; }
           }
           if (target && edited) {
-            await joomla('PATCH', `${JC}/content/articles/${target}`, { title: c.title, articletext: art, catid: c.catid });
+            await joomla('PATCH', `${JC}/content/articles/${target}`, { title: c.title, articletext: art, catid: c.catid, state: 0 }); // ویرایش هم برای بررسی مجدد منتشر نشده می‌شود
             console.log(`${key}: updated article ${target} (${c.kind})`);
           } else if (target && !edited) {
             console.log(`${key}: already article ${target} — skipped`);
@@ -304,8 +317,8 @@ async function main() {
             const res = await createArticle({ title: c.title, articletext: art, catid: c.catid });
             state.ids[key] = res.data.attributes.id;
             console.log(`${key}: ${c.kind} article ${state.ids[key]}`);
-            if (!known) state.done.push(key);
           }
+          if (!known) state.done.push(key); // ردشده (denied/skipped) و منتشرنشده هم ثبت می‌شوند — ویرایش بعدی همچنان دوباره بررسی می‌شود
         }
       }
       state.lastUpdateId = u.update_id;
@@ -414,4 +427,4 @@ async function diag() {
 if (process.argv[2] === 'diag') await diag();
 else if (process.env.TEST !== '1') await main();
 
-export { parseStructured, toHtml, extOf };
+export { parseStructured, toHtml, extOf, denied, buildContent };

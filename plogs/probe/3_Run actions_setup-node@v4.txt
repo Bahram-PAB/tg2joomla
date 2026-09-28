@@ -1,0 +1,19 @@
+﻿2026-09-28T10:17:27.9105953Z ##[group]Run actions/setup-node@v4
+2026-09-28T10:17:27.9107316Z with:
+2026-09-28T10:17:27.9108232Z   node-version: 20
+2026-09-28T10:17:27.9109244Z   always-auth: false
+2026-09-28T10:17:27.9110285Z   check-latest: false
+2026-09-28T10:17:27.9120851Z   token: ***
+2026-09-28T10:17:27.9121815Z ##[endgroup]
+2026-09-28T10:17:28.0569242Z Attempting to download 20...
+2026-09-28T10:17:28.0677873Z (node:2243) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-28T10:17:28.0683390Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-28T10:17:28.5157774Z Acquiring 20.20.2 - x64 from https://github.com/actions/node-versions/releases/download/20.20.2-23521894959/node-20.20.2-linux-x64.tar.gz
+2026-09-28T10:17:28.8173867Z Extracting ...
+2026-09-28T10:17:28.8294113Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/f0a0f615-cf10-4fa1-aae0-93588ead4ac0 -f /home/runner/work/_temp/2acf6bc9-c7f0-497a-8e2f-acf6e9d49226
+2026-09-28T10:17:29.8639660Z Adding to the cache ...
+2026-09-28T10:17:31.7332495Z ##[group]Environment details
+2026-09-28T10:17:31.9660963Z node: v20.20.2
+2026-09-28T10:17:31.9661608Z npm: 10.8.2
+2026-09-28T10:17:31.9661985Z yarn: 1.22.22
+2026-09-28T10:17:31.9662781Z ##[endgroup]
