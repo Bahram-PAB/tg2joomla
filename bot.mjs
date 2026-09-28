@@ -185,6 +185,7 @@ async function main() {
   // یک‌بار: ترمیم رسانه — اگر فایل آپلودشده JSON خطای تلگرام باشد، دوباره دانلود و آپلود می‌شود
   if (!state.media_migrated) {
     const OLD = '/images/images/tg/', NEW = '/images/tg/';
+    let repairFailed = false;
     for (const [k, fid] of Object.entries(state.files)) {
       const dir = k.endsWith('-a') || state.fnames[k]?.endsWith('.mp3') || state.fnames[k]?.endsWith('.ogg') || state.fnames[k]?.endsWith('.m4a') ? AUDIO_DIR : MEDIA_DIR;
       const fname = state.fnames[k];
@@ -197,11 +198,11 @@ async function main() {
         console.log(`repair ${fname}: stored file is TG error JSON, re-downloading…`);
         // 404 دانلود تلگرام دوره‌ای است — با فاصله تلاش کن
         let ok = false;
-        for (let a = 1; a <= 4 && !ok; a++) {
+        for (let a = 1; a <= 3 && !ok; a++) {
           try { const { buf } = await downloadFile(fid); await uploadMedia(dir, fname, buf); console.log(`repair ${fname}: re-uploaded ${buf.length} bytes (attempt ${a})`); ok = true; }
-          catch (e) { if (!/TG download 404/.test(e.message) || a === 4) throw e; console.log(`repair ${fname}: attempt ${a} got 404, waiting 20s…`); await new Promise(r => setTimeout(r, 20000)); }
+          catch (e) { if (!/TG download 404/.test(e.message) || a === 3) throw e; console.log(`repair ${fname}: attempt ${a} got 404, waiting 15s…`); await new Promise(r => setTimeout(r, 15000)); }
         }
-      } catch (e) { console.log(`repair ${fname}: ${e.message.slice(0, 140)}`); }
+      } catch (e) { console.log(`repair ${fname}: ${e.message.slice(0, 140)}`); repairFailed = true; }
     }
     // اصلاح URL قدیمی داخل مطالب (در صورت وجود)
     for (const [k, aid] of Object.entries(state.ids)) {
@@ -214,8 +215,13 @@ async function main() {
         }
       } catch (e) { console.log(`url-fix article ${aid}: ${e.message.slice(0, 140)}`); }
     }
-    state.media_migrated = true;
-    saveState(state);
+    if (repairFailed) {
+      console.log('repair: some files still failing — will retry next run');
+      saveState(state);
+    } else {
+      state.media_migrated = true;
+      saveState(state);
+    }
   }
 
   const updates = (await tg('getUpdates', { offset: state.lastUpdateId + 1, allowed_updates: ['channel_post', 'edited_channel_post'], timeout: 0 })) || [];
