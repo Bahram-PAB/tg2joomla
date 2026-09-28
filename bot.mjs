@@ -195,9 +195,12 @@ async function main() {
         const head = Buffer.from(content, 'base64').slice(0, 16).toString();
         if (!head.startsWith('{"ok":false')) continue; // سالم است
         console.log(`repair ${fname}: stored file is TG error JSON, re-downloading…`);
-        const { buf } = await downloadFile(fid);
-        await uploadMedia(dir, fname, buf);
-        console.log(`repair ${fname}: re-uploaded ${buf.length} bytes`);
+        // 404 دانلود تلگرام دوره‌ای است — با فاصله تلاش کن
+        let ok = false;
+        for (let a = 1; a <= 4 && !ok; a++) {
+          try { const { buf } = await downloadFile(fid); await uploadMedia(dir, fname, buf); console.log(`repair ${fname}: re-uploaded ${buf.length} bytes (attempt ${a})`); ok = true; }
+          catch (e) { if (!/TG download 404/.test(e.message) || a === 4) throw e; console.log(`repair ${fname}: attempt ${a} got 404, waiting 20s…`); await new Promise(r => setTimeout(r, 20000)); }
+        }
       } catch (e) { console.log(`repair ${fname}: ${e.message.slice(0, 140)}`); }
     }
     // اصلاح URL قدیمی داخل مطالب (در صورت وجود)
