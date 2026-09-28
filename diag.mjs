@@ -1,11 +1,11 @@
 // پروب: تست آپلود overwrite با فیلدهای مختلف Joomla
-import { readFileSync } from 'node:fs';
+import { } from 'node:fs';
 
 const JC = `${process.env.JOOMLA_BASE}/api/index.php/v1`;
 const H = { 'Content-Type': 'application/json', Accept: 'application/vnd.api+json', 'X-Joomla-Token': process.env.JOOMLA_TOKEN };
 
 const path = 'local-images:/tg/test-probe.jpg';
-const content = readFileSync('t2146.jpg').toString('base64');
+const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]).toString('base64');
 
 async function j(method, url, body) {
   const r = await fetch(url, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
