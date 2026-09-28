@@ -1,24 +1,43 @@
-// پروب: دانلود عکس از صفحهٔ عمومی t.me/s/ — URL بدون نقل‌قول
-import { execSync } from 'node:child_process';
+// پروب: تست آپلود overwrite با فیلدهای مختلف Joomla
 import { readFileSync } from 'node:fs';
 
-const state = JSON.parse(readFileSync('state/processed.json', 'utf8'));
-const samples = Object.entries(state.files).slice(0, 3);
-for (const [key] of samples) {
-  const msgId = key.split(':')[1];
-  console.log(`\n--- msg ${msgId} ---`);
-  try {
-    const html = execSync(`curl -sS --max-time 20 "https://t.me/s/koohnameh/${msgId}"`, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
-    const m = html.match(/background-image:\s*url\(([^)]+)\)/);
-    if (!m) { console.log('no image found'); continue; }
-    const url = m[1].trim().replace(/^['"]|['"]$/g, ''); // حذف نقل‌قول
-    console.log('url:', url.slice(0, 90));
-    const out = execSync(`curl -sS -f -w '%{http_code} %{size_download}' --max-time 30 -o tme_${msgId}.jpg '${url}'`, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
-    console.log('download:', out);
-    const b = readFileSync(`tme_${msgId}.jpg`);
-    const head = b.slice(0, 4).toString('hex');
-    const isJpeg = head.startsWith('ffd8');
-    console.log(`head=${head} jpeg=${isJpeg} size=${b.length}`);
-    execSync(`rm -f tme_${msgId}.jpg`);
-  } catch (e) { console.log('error:', String(e.stderr || e.message).slice(0, 200)); }
+const JC = `${process.env.JOOMLA_BASE}/api/index.php/v1`;
+const H = { 'Content-Type': 'application/json', Accept: 'application/vnd.api+json', 'X-Joomla-Token': process.env.JOOMLA_TOKEN };
+
+const path = 'local-images:/tg/test-probe.jpg';
+const content = readFileSync('t2146.jpg').toString('base64');
+
+async function j(method, url, body) {
+  const r = await fetch(url, { method, headers: H, body: body ? JSON.stringify(body) : undefined });
+  const t = await r.text();
+  console.log(`  ${method} ${url.split('/').pop()?.slice(0, 20)} → ${r.status} ${t.slice(0, 120)}`);
+  return { status: r.status, text: t };
 }
+
+// 1. Upload without overwrite (expect 400 if exists, or 200 if first time)
+console.log('1. POST no overwrite:');
+await j('POST', `${JC}/media/files`, { path, content });
+
+// 2. POST with override:true in body
+console.log('2. POST override:true body:');
+await j('POST', `${JC}/media/files`, { path, content, override: true });
+
+// 3. POST with overwrite=1 query param
+console.log('3. POST overwrite=1 query:');
+await j('POST', `${JC}/media/files?overwrite=1`, { path, content });
+
+// 4. POST with overwrite:true in body
+console.log('4. POST overwrite:true body:');
+await j('POST', `${JC}/media/files`, { path, content, overwrite: true });
+
+// 5. DELETE via query param
+console.log('5. DELETE query path:');
+await j('DELETE', `${JC}/media/files?path=${encodeURIComponent(path)}`);
+
+// 6. DELETE via body
+console.log('6. DELETE body path:');
+await j('DELETE', `${JC}/media/files`, { path });
+
+// 7. GET to check current state
+console.log('7. GET file:');
+await j('GET', `${JC}/media/files?path=${encodeURIComponent(path)}&content=0`);
