@@ -182,9 +182,25 @@ async function main() {
 
   const state = loadState();
   state.ids = state.ids || {}; state.files = state.files || {}; state.fnames = state.fnames || {}; state.fcount = state.fcount || {}; state.tries = state.tries || {};
-  // یک‌بار: اصلاح URL داخل مطالب عکس‌دار (فایل‌ها را خود کاربر به images/tg منتقل می‌کند)
+  // یک‌بار: ترمیم رسانه — اگر فایل آپلودشده JSON خطای تلگرام باشد، دوباره دانلود و آپلود می‌شود
   if (!state.media_migrated) {
     const OLD = '/images/images/tg/', NEW = '/images/tg/';
+    for (const [k, fid] of Object.entries(state.files)) {
+      const dir = k.endsWith('-a') || state.fnames[k]?.endsWith('.mp3') || state.fnames[k]?.endsWith('.ogg') || state.fnames[k]?.endsWith('.m4a') ? AUDIO_DIR : MEDIA_DIR;
+      const fname = state.fnames[k];
+      if (!fname) continue;
+      try {
+        const cur = await joomla('GET', `${JC}/media/files?path=${encodeURIComponent(`local-images:/${dir}/${fname}`)}&content=1`);
+        const content = String((Array.isArray(cur.data) ? cur.data[0] : cur.data)?.attributes?.content || '');
+        const head = Buffer.from(content, 'base64').slice(0, 16).toString();
+        if (!head.startsWith('{"ok":false')) continue; // سالم است
+        console.log(`repair ${fname}: stored file is TG error JSON, re-downloading…`);
+        const { buf } = await downloadFile(fid);
+        await uploadMedia(dir, fname, buf);
+        console.log(`repair ${fname}: re-uploaded ${buf.length} bytes`);
+      } catch (e) { console.log(`repair ${fname}: ${e.message.slice(0, 140)}`); }
+    }
+    // اصلاح URL قدیمی داخل مطالب (در صورت وجود)
     for (const [k, aid] of Object.entries(state.ids)) {
       try {
         const one = await joomla('GET', `${JC}/content/articles/${aid}`);
