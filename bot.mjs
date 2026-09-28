@@ -77,19 +77,29 @@ const uploadMedia = async (dir, name, buf) => {
 
 // دانلود فایل تلگرام — با curl (node fetch/undici روی GH runners از تلگرام 404 می‌گیرد؛ curl تست‌شده سالم است)
 function curlDownload(url) {
-  return execSync(`curl -sS --max-time 180 "${url}"`, { maxBuffer: 512 * 1024 * 1024 });
+  return execSync(`curl -sS -f --max-time 180 "${url}"`, { maxBuffer: 512 * 1024 * 1024 });
 }
 
 async function downloadFile(fileId) {
   const f = await tg('getFile', { file_id: fileId });
   const url = `${TG}/file/bot${BOT_TOKEN}/${f.file_path}`;
-  const buf = curlDownload(url);
+  let buf;
+  try {
+    buf = curlDownload(url);
+  } catch (e) {
+    const code = (String(e.stderr || e.message).match(/\b(4\d\d|5\d\d)\b/) || [])[1] || '0';
+    const err = new Error(`TG download ${code} (file_path=${f.file_path}) ${String(e.stderr || e.message).slice(-120).replace(/\n/g, ' ')}`);
+    err.status = code === '404' ? 0 : 500; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف ۱۰ تلاش)
+    throw err;
+  }
   if (!buf || buf.length < 8) throw new Error(`TG download empty (file_path=${f.file_path})`);
-  if (buf.slice(0, 10).toString().startsWith('{"ok":false')) {
+  // محافظت قطعی: هرگز پاسخ خطای JSON تلگرام را به‌جای تصویر ذخیره نکن
+  const head = buf.slice(0, 16).toString();
+  if (head.startsWith('{"ok":false')) {
     const code = (buf.toString().match(/"error_code":(\d+)/) || [])[1] || 'ERR';
-    const e = new Error(`TG download ${code} (file_path=${f.file_path}) ${buf.toString().slice(0, 120)}`);
-    e.status = code === '404' ? 0 : 500; // 404 دانلود تلگرام موقت شمرده می‌شود (تا سقف ۱۰ تلاش)
-    throw e;
+    const err = new Error(`TG download ${code} (file_path=${f.file_path}) ${buf.toString().slice(0, 120)}`);
+    err.status = code === '404' ? 0 : 500;
+    throw err;
   }
   return { buf, name: f.file_path.split('/').pop() };
 }
