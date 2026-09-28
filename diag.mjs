@@ -1,33 +1,33 @@
-// پروب دوم: چرا دانلود 404 می‌دهد؟ — تست hostname/آی‌پی جایگزین + هدرها
+// پروب: دانلود عکس از صفحهٔ عمومی t.me/s/
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const TG = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const state = JSON.parse(readFileSync('state/processed.json', 'utf8'));
-const [key, fid] = Object.entries(state.files)[0];
-
-const f = await (await fetch(`${TG}/getFile`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ file_id: fid }),
-})).json();
-console.log('file_path:', f.result.file_path, 'size:', f.result.file_size);
-
-const variants = [
-  `https://api.telegram.org/file/bot${BOT_TOKEN}/${f.result.file_path}`,
-  `https://api-1.telegram.org/file/bot${BOT_TOKEN}/${f.result.file_path}`,
-  `https://cdn-1.telegram.org/file/bot${BOT_TOKEN}/${f.result.file_path}`,
-  `https://api.telegram.org/file/bot${BOT_TOKEN}/photos/file_8.jpg`,
-];
-for (const url of variants) {
-  const host = new URL(url).host;
+// فقط چند پیام نمونه از عکس‌دارها تست کن
+const samples = Object.entries(state.files).slice(0, 3);
+for (const [key, fid] of samples) {
+  const msgId = key.split(':')[1];
+  console.log(`\n--- msg ${msgId} ---`);
   try {
-    const out = execSync(`curl -sS -f -w '%{http_code} %{size_download} %{remote_ip}' --max-time 30 "${url}"`, { stdio: ['ignore', 'pipe', 'pipe'] });
-    console.log(`OK  ${host}: ${out.slice(-40).toString()}`);
-  } catch (e) {
-    console.log(`ERR ${host}: ${String(e.stderr || e.message).slice(-90).replace(/\n/g, ' ')}`);
-  }
+    // دانلود صفحهٔ عمومی
+    const html = execSync(`curl -sS --max-time 20 "https://t.me/s/koohnameh/${msgId}"`, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+    // پیدا کردن img src تصویر اصلی پست (نه آواتار، نه تامبنیل)
+    const match = html.match(/background-image:\s*url\(([^)]+)\)/)
+      || html.match(/<img[^>]*class="[^"]*tgme_widget_message_photo[^"]*"[^>]*src="([^"]+)"/i)
+      || html.match(/<img[^>]*src="(https?:\/\/[^"]*\/photos\/[^"]+)"/i);
+    if (match) {
+      console.log('found img:', match[1].slice(0, 100));
+      // دانلود تصویر
+      const out = execSync(`curl -sS -f -w '%{http_code} %{size_download}' --max-time 20 -o tme_${msgId}.jpg "${match[1]}"`, { stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+      console.log('download:', out);
+      // بررسی magic byte
+      const head = readFileSync(`tme_${msgId}.jpg`).slice(0, 8).toString('hex');
+      console.log('head hex:', head);
+    } else {
+      // fallback: هر img که تامبنیل نباشد
+      const imgs = [...html.matchAll(/<img[^>]*src="([^"]+)"/gi)].map(m => m[1]).filter(u => !u.includes('avatar') && !u.includes('logo'));
+      console.log('no specific match; found imgs:', imgs.length);
+      imgs.slice(0, 3).forEach(u => console.log('  ', u.slice(0, 100)));
+    }
+  } catch (e) { console.log('error:', e.message.slice(0, 200)); }
 }
-// هدرهای پاسخ 404 را ببینیم
-console.log(execSync(`curl -sS -D - -o /dev/null --max-time 30 "https://api.telegram.org/file/bot${BOT_TOKEN}/${f.result.file_path}"`, { stdio: ['ignore', 'pipe', 'pipe'] }).toString().split('\n').filter(l => /HTTP|server|date|content-/i.test(l)).join('\n'));
