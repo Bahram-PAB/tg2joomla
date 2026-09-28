@@ -1,3 +1,8 @@
 logs/
 run.zip
 runs.json
+
+latest.json
+plogs/
+logs/
+*.zip
