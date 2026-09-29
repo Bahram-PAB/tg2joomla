@@ -27,6 +27,7 @@ assert.equal(denied('🏔 پیش‌بینی یکشنبه 5 مهر'), true);
 assert.equal(denied('📡 گزارش کانال‌های فعال امروز'), true);
 assert.equal(denied('🔥 پست‌های داغ امروز'), true);
 assert.equal(denied('پادکست روزانه ۲۶ مهر'), true);
+assert.equal(denied('تصاویر دیدنی امروز به انتخاب کوهنامه.'), true);
 assert.equal(denied('صعود تازه به دیواره علم‌کوه'), false);
 assert.equal(denied('پیش‌بینی بارش برف در ارتفاعات البرز'), false); // خبر واقعی با «پیش‌بینی» رد نمی‌شود
 // ساخت محتوا: پیام هوا → denied؛ خبر عادی → text
