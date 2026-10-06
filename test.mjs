@@ -33,5 +33,8 @@ assert.equal(denied('پیش‌بینی بارش برف در ارتفاعات ا�
 // ساخت محتوا: پیام هوا → denied؛ خبر عادی → text
 assert.equal(buildContent({ text: '🏔 پیش‌بینی یکشنبه 5 مهر\n\n━━━\n⛰️ دماوند' }).kind, 'denied');
 assert.equal(buildContent({ text: 'صعود دیواره علم‌کوه\n\nخبر کامل اینجاست.' }).kind, 'text');
+// باگ رگرسیون: پیام فیلترشده باید رشته skip برگرداند نه شیء بدون عنوان (وگرنه Joomla 400 می‌دهد)
+const { handlePost } = await import('./bot.mjs');
+assert.equal(await handlePost({ text: '🏔 پیش‌بینی یکشنبه 5 مهر\n\n━━━\n⛰️ دماوند' }, 'k', {}), 'denied');
 
 console.log('OK');

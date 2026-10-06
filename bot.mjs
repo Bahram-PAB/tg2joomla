@@ -220,7 +220,7 @@ async function mediaFor(post, c, key, state) {
 // خروجی: رشته = رد شده؛ شیء = محتوای آماده انتشار
 async function handlePost(post, key, state) {
   const c = buildContent(post);
-  if (['photo-no-caption-skipped', 'structure-skipped', 'type-skipped'].includes(c.kind)) return c.kind;
+  if (['photo-no-caption-skipped', 'structure-skipped', 'type-skipped', 'denied'].includes(c.kind)) return c.kind;
   const fname = c.kind === 'photo' || c.kind === 'audio' ? await mediaFor(post, c, key, state).catch(e => {
     if (/file is too big/.test(e.message)) return null; // >20MB: قابل دانلود نیست — مطلب با لینک تلگرام ساخته می‌شود
     throw e;
@@ -442,4 +442,4 @@ async function diag() {
 if (process.argv[2] === 'diag') await diag();
 else if (process.env.TEST !== '1') await main();
 
-export { parseStructured, toHtml, extOf, denied, buildContent };
+export { parseStructured, toHtml, extOf, denied, buildContent, handlePost };
