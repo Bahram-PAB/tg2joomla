@@ -108,10 +108,24 @@ async function downloadFile(fileId) {
 // دانلود از صفحهٔ عمومی کانال — وقتی لینک Bot API منقضی شده (فایل قدیمی)؛
 // t.me/s/<channel>/<id> همیشه در دسترس است و URL عکس را می‌دهد
 function downloadFromChannelPage(msgId) {
-  const html = execSync(`curl -sS --max-time 20 "https://t.me/s/${CHANNEL}/${msgId}"`, { maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
+  const page = u => execSync(`curl -sS --max-time 20 "${u}"`, { maxBuffer: 16 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).toString();
   // فقط ناحیهٔ همین پیام — صفحه پیام‌های اطراف را هم رندر می‌کند
-  const idx = html.indexOf(`data-post="${CHANNEL}/${msgId}"`);
-  if (idx < 0) throw new Error(`channel page: msg ${msgId} not found`);
+  let html = page(`https://t.me/s/${CHANNEL}/${msgId}`);
+  let idx = html.indexOf(`data-post="${CHANNEL}/${msgId}"`);
+  if (idx < 0) {
+    // پیام قدیمی از صفحهٔ اول افتاده — بارگذاری صفحه روی همان پیام
+    html = page(`https://t.me/s/${CHANNEL}?before=${msgId + 1}`);
+    idx = html.indexOf(`data-post="${CHANNEL}/${msgId}"`);
+    if (idx < 0) {
+      if (html.includes('data-post="')) {
+        // صفحه سالم است ولی این پیام در آن نیست → از کانال حذف شده؛ ترمیم‌ناپذیر (بدون ریترای بی‌پایان)
+        const e = new Error(`channel page: msg ${msgId} gone from channel`);
+        e.status = 400;
+        throw e;
+      }
+      throw new Error(`channel page: msg ${msgId} not found`); // صفحه قابل خواندن نبود — ریترای موقت
+    }
+  }
   const next = html.indexOf('data-post="', idx + 10);
   const seg = html.slice(idx, next > 0 ? next : idx + 10000);
   const m = seg.match(/background-image:\s*url\(([^)]+)\)/);
@@ -136,7 +150,7 @@ async function resolveMediaBuffer(fid, msgId, tries = 2) {
     }
   }
   try { return downloadFromChannelPage(msgId); }
-  catch { throw lastErr; } // پیام خطای اصلی حفظ شود (سقف تلاش شناخته شود)
+  catch (e) { if (e.status === 400) throw e; throw lastErr; } // پیام حذف‌شده ترمیم‌ناپذیر است؛ وگرنه خطای اصلی حفظ شود (سقف تلاش شناخته شود)
 }
 
 // فیلتر پیام‌هایی که نباید به سایت بروند (بر اساس عنوان)
