@@ -164,52 +164,34 @@ const DENY = [
 const denied = title => DENY.some(re => re.test(title));
 
 // تعیین نوع پیام و تولید محتوای مطلب از روی آن
+// ponytail: فعلا فقط پیام با «عکس + کپشن» منتقل می‌شود؛ متن و صدا فعلا رد می‌شوند.
+// لإعادةِ پشتیبانی از صدا/متن، branchِ مربوطه را از تاریخچهٔ git بازگردانید.
 function buildContent(post) {
-  const audio = post.audio || (post.document && String(post.document.mime_type || '').startsWith('audio/') && post.document);
-  if (audio) {
-    const cap = (post.caption || '').trim();
-    const p = cap ? parseStructured(cap) : null;
-    const title = p ? p.title : (audio.file_name || 'فایل صوتی').replace(/\.[a-z0-9]+$/i, '');
-    if (denied(title)) return { kind: 'denied' };
-    return { kind: 'audio', audio, title, html: p ? toHtml(p.body) : '', catid: CAT_TEXT };
-  }
-  if (post.photo) {
-    if (!post.caption) return { kind: 'photo-no-caption-skipped' };
-    const p = parseStructured(post.caption);
-    if (!p) return { kind: 'structure-skipped' };
-    if (denied(p.title)) return { kind: 'denied' };
-    return { kind: 'photo', photos: post.photo, title: p.title, html: toHtml(p.body), alt: esc(p.title), catid: CAT_TEXT };
-  }
-  if (post.text) {
-    const p = parseStructured(post.text);
-    if (!p) return { kind: 'structure-skipped' };
-    if (denied(p.title)) return { kind: 'denied' };
-    return { kind: 'text', title: p.title, html: toHtml(p.body), catid: CAT_TEXT };
-  }
-  return { kind: 'type-skipped' };
+  if (!post.photo) return { kind: 'type-skipped' };
+  if (!post.caption) return { kind: 'photo-no-caption-skipped' };
+  const p = parseStructured(post.caption);
+  if (!p) return { kind: 'structure-skipped' };
+  if (denied(p.title)) return { kind: 'denied' };
+  return { kind: 'photo', photos: post.photo, title: p.title, html: toHtml(p.body), alt: esc(p.title), catid: CAT_TEXT };
 }
 
-// دانلود و آپلود رسانه (در صورت تغییر file_id؛ در غیر این صورت از آپلود قبلی استفاده می‌شود)
+// دانلود و آپلود عکس (در صورت تغییر file_id؛ در غیر این صورت از آپلود قبلی استفاده می‌شود)
 async function mediaFor(post, c, key, state) {
-  const dir = c.kind === 'photo' ? MEDIA_DIR : AUDIO_DIR;
-  const mime = c.kind === 'photo' ? 'image/jpeg' : c.audio.mime_type;
-  const fid = c.kind === 'photo' ? c.photos[c.photos.length - 1].file_id : c.audio.file_id;
+  const dir = MEDIA_DIR;
+  const mime = 'image/jpeg';
+  const fid = c.photos[c.photos.length - 1].file_id;
   if (state.files[key] === fid && state.fnames[key]) return state.fnames[key];
   const n = (state.fcount[key] || 0) + 1;
   let buf, name;
-  if (c.kind === 'photo') {
-    // از بزرگ‌ترین سایز شروع کن؛ همه 404 دادند → صفحهٔ عمومی کانال
-    try {
-      for (let i = c.photos.length - 1; i >= 0; i--) {
-        try { ({ buf, name } = await downloadFile(c.photos[i].file_id)); break; }
-        catch (e) { if (i === 0 || !/TG download 404/.test(e.message)) throw e; console.log(`  photo size ${i} failed, trying smaller…`); }
-      }
-    } catch (e) {
-      if (!/TG download 404/.test(e.message)) throw e;
-      ({ buf, name } = downloadFromChannelPage(post.message_id)); // لینک Bot API منقضی شده
+  // از بزرگ‌ترین سایز شروع کن؛ همه 404 دادند → صفحهٔ عمومی کانال
+  try {
+    for (let i = c.photos.length - 1; i >= 0; i--) {
+      try { ({ buf, name } = await downloadFile(c.photos[i].file_id)); break; }
+      catch (e) { if (i === 0 || !/TG download 404/.test(e.message)) throw e; console.log(`  photo size ${i} failed, trying smaller…`); }
     }
-  } else {
-    ({ buf, name } = await resolveMediaBuffer(fid, post.message_id));
+  } catch (e) {
+    if (!/TG download 404/.test(e.message)) throw e;
+    ({ buf, name } = downloadFromChannelPage(post.message_id)); // لینک Bot API منقضی شده
   }
   const fname = `tg-${post.message_id}${n > 1 ? '-' + n : ''}.${extOf(name, mime)}`;
   await uploadMedia(dir, fname, buf);
@@ -220,22 +202,13 @@ async function mediaFor(post, c, key, state) {
 // خروجی: رشته = رد شده؛ شیء = محتوای آماده انتشار
 async function handlePost(post, key, state) {
   const c = buildContent(post);
-  if (['photo-no-caption-skipped', 'structure-skipped', 'type-skipped', 'denied'].includes(c.kind)) return c.kind;
-  const fname = c.kind === 'photo' || c.kind === 'audio' ? await mediaFor(post, c, key, state).catch(e => {
-    if (/file is too big/.test(e.message)) return null; // >20MB: قابل دانلود نیست — مطلب با لینک تلگرام ساخته می‌شود
+  if (c.kind !== 'photo') return c.kind;
+  const fname = await mediaFor(post, c, key, state).catch(e => {
+    if (/file is too big/.test(e.message)) return null; // >20MB: قابل دانلود نیست
     throw e;
-  }) : null;
-  if (!fname && c.kind === 'audio') {
-    const u = post.chat.username ? `https://t.me/${post.chat.username}/${post.message_id}` : '';
-    if (!u) return 'too-big-no-username-skipped';
-    return { c, art: c.html + `\n<p><a href="${u}">🔊 شنیدن این فایل صوتی در تلگرام</a></p>`, tooBig: true };
-  }
-  const art = c.kind === 'photo'
-    ? `<figure><img src="/images/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}`
-    : c.kind === 'audio'
-      ? `<audio controls src="/images/${AUDIO_DIR}/${fname}"></audio>${c.html ? '\n' + c.html : ''}`
-      : c.html;
-  return { c, art };
+  });
+  if (!fname) return 'photo-download-failed-skipped';
+  return { c, art: `<figure><img src="/images/${MEDIA_DIR}/${fname}" alt="${c.alt}"></figure>\n${c.html}` };
 }
 
 const loadState = () => {

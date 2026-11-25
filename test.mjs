@@ -30,11 +30,15 @@ assert.equal(denied('🎙 پادکست روز "14 مهر 1405" کوهنامه'),
 assert.equal(denied('تصاویر دیدنی امروز به انتخاب کوهنامه.'), true);
 assert.equal(denied('صعود تازه به دیواره علم‌کوه'), false);
 assert.equal(denied('پیش‌بینی بارش برف در ارتفاعات البرز'), false); // خبر واقعی با «پیش‌بینی» رد نمی‌شود
-// ساخت محتوا: پیام هوا → denied؛ خبر عادی → text
-assert.equal(buildContent({ text: '🏔 پیش‌بینی یکشنبه 5 مهر\n\n━━━\n⛰️ دماوند' }).kind, 'denied');
-assert.equal(buildContent({ text: 'صعود دیواره علم‌کوه\n\nخبر کامل اینجاست.' }).kind, 'text');
-// باگ رگرسیون: پیام فیلترشده باید رشته skip برگرداند نه شیء بدون عنوان (وگرنه Joomla 400 می‌دهد)
+// ساخت محتوا: فعلا فقط عکس + کپشن منتقل می‌شود؛ متن/صدا رد می‌شوند
+const caption = 'صعود دیواره علم‌کوه\n\nخبر کامل اینجاست.';
+assert.equal(buildContent({ photo: [{ file_id: 'x' }], caption }).kind, 'photo');
+assert.equal(buildContent({ photo: [{ file_id: 'x' }] }).kind, 'photo-no-caption-skipped');
+assert.equal(buildContent({ text: caption }).kind, 'type-skipped');
+assert.equal(buildContent({ audio: { file_id: 'a', mime_type: 'audio/mpeg' }, caption }).kind, 'type-skipped');
+// باگ رگرسیون: پیام ردشده باید رشته skip برگرداند نه شیء بدون عنوان (وگرنه Joomla 400 می‌دهد)
 const { handlePost } = await import('./bot.mjs');
-assert.equal(await handlePost({ text: '🏔 پیش‌بینی یکشنبه 5 مهر\n\n━━━\n⛰️ دماوند' }, 'k', {}), 'denied');
+assert.equal(await handlePost({ text: caption }, 'k', {}), 'type-skipped');
+assert.equal(await handlePost({ audio: { file_id: 'a', mime_type: 'audio/mpeg' }, caption }, 'k', {}), 'type-skipped');
 
 console.log('OK');
